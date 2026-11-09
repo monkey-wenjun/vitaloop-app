@@ -144,9 +144,25 @@ pub fn compute(
     yesterday_total: Option<i64>,
     computed_at_ms: i64,
 ) -> ReadinessScore {
+    compute_with_sleep_score(inputs, baseline, yesterday_total, computed_at_ms, None)
+}
+
+pub fn compute_with_sleep_score(
+    inputs: &ReadinessInputs,
+    baseline: &ReadinessBaseline,
+    yesterday_total: Option<i64>,
+    computed_at_ms: i64,
+    official_sleep_score: Option<f64>,
+) -> ReadinessScore {
     let parts = [
         (hrv_component(inputs, baseline), WEIGHT_HRV),
-        (sleep_component(inputs), WEIGHT_SLEEP),
+        (
+            official_sleep_score
+                .filter(|value| *value > 0.0)
+                .map(clamp)
+                .or_else(|| sleep_component(inputs)),
+            WEIGHT_SLEEP,
+        ),
         (rhr_component(inputs, baseline), WEIGHT_RHR),
         (temp_component(inputs, baseline), WEIGHT_TEMP),
         (stress_component(inputs), WEIGHT_STRESS),
@@ -346,6 +362,13 @@ mod tests {
             ..excellent
         };
         assert_eq!(sleep_component(&woke_three_times), Some(75.3));
+    }
+
+    #[test]
+    fn official_watch_sleep_score_overrides_local_formula() {
+        let inputs = full_inputs();
+        let score = compute_with_sleep_score(&inputs, &demo_baseline(), None, 0, Some(79.0));
+        assert_eq!(score.sleep_score, 79);
     }
 
     #[test]

@@ -263,8 +263,8 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         private const val P2P_SYNC_INTERVAL_MS = 900_000L
         private const val WEATHER_CACHE_TTL_MS = 30 * 60_000L
         private const val STRESS_FILE_SYNC_INTERVAL_MS = 3_600_000L
-        private const val SLEEP_FILE_SYNC_INTERVAL_MS = 1_800_000L
-        private const val SLEEP_DETAIL_SYNC_INTERVAL_MS = 1_800_000L
+        private const val SLEEP_FILE_SYNC_INTERVAL_MS = 300_000L
+        private const val SLEEP_DETAIL_SYNC_INTERVAL_MS = 300_000L
         private const val TOOL_TIMEOUT_MS = 20_000L
         private const val WATCHFACE_UPLOAD_TIMEOUT_MS = 300_000L
         private const val MUSIC_UPLOAD_TIMEOUT_MS = 300_000L
@@ -2340,6 +2340,10 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     private fun onReady() {
         setState("ready")
         emitDevice(true)
+        // 每次建立连接都强制接受下一轮睡眠文件同步，保证打开 App/后台重连后
+        // 不沿用进程里的旧节流时间，起床后第一次连接就能拿到最终评分和时长。
+        lastSleepFileSyncAt = 0
+        lastSleepDetailSyncAt = 0
         refreshWearStatus("连接初始化")
         registerMediaSessionListener()
         if (isWeatherSyncEnabled()) syncWeather()
@@ -2808,6 +2812,16 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         } finally {
             syncing = false
         }
+    }
+
+    /**
+     * 用户打开 App / 手动同步时强制补一次睡眠文件。
+     * 夜间最后一版睡眠摘要通常在起床后才生成，不能被 5 分钟节流挡住。
+     */
+    fun forceSleepSync() {
+        lastSleepFileSyncAt = 0
+        lastSleepDetailSyncAt = 0
+        syncOnce(manual = true)
     }
 
     /**
@@ -3795,7 +3809,10 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             summary.bedTime,
             summary.fallAsleepTime,
             summary.wakeupTime,
-            summary.risingTime
+            summary.risingTime,
+            summary.sleepScore,
+            summary.sleepEfficiency,
+            summary.wakeCount
         )
     }
 
@@ -4425,7 +4442,15 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     }
 
     /** 上床/入睡/醒来/离床统一按毫秒事件入库；0 表示该字段缺失。 */
-    private fun emitSleepBedWindow(bedSec: Long, fallAsleepSec: Long, wakeSec: Long, risingSec: Long) {
+    private fun emitSleepBedWindow(
+        bedSec: Long,
+        fallAsleepSec: Long,
+        wakeSec: Long,
+        risingSec: Long,
+        sleepScore: Int = -1,
+        sleepEfficiency: Int = -1,
+        wakeCount: Int = -1,
+    ) {
         val sessionStartSec = listOf(bedSec, fallAsleepSec, wakeSec, risingSec)
             .filter { it > 0 }
             .minOrNull()
@@ -4437,8 +4462,17 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         if (fallAsleepSec > 0) event.put("fall_asleep", fallAsleepSec * 1000)
         if (wakeSec > 0) event.put("wake", wakeSec * 1000)
         if (risingSec > 0) event.put("rising", risingSec * 1000)
+        if (fallAsleepSec > 0 && wakeSec > fallAsleepSec) {
+            event.put("duration_min", (wakeSec - fallAsleepSec) / 60)
+        }
+        if (sleepScore in 1..100) event.put("score", sleepScore)
+        if (sleepEfficiency in 1..100) event.put("efficiency", sleepEfficiency)
+        if (wakeCount >= 0) event.put("wake_count", wakeCount)
         emit(event)
-        addLog("睡眠会话: 上床 ${formatEpoch(bedSec)}，入睡 ${formatEpoch(fallAsleepSec)}，醒来 ${formatEpoch(wakeSec)}")
+        addLog(
+            "睡眠会话: 上床 ${formatEpoch(bedSec)}，入睡 ${formatEpoch(fallAsleepSec)}，" +
+                "醒来 ${formatEpoch(wakeSec)}，评分 $sleepScore，效率 $sleepEfficiency"
+        )
     }
 
     private fun decodeDictEpochMillis(bytes: ByteArray?): Long? {

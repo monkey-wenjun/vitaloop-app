@@ -10,7 +10,7 @@ use crate::readiness;
 
 static DB: OnceLock<Mutex<Option<Connection>>> = OnceLock::new();
 
-pub const DB_VERSION: i64 = 9;
+pub const DB_VERSION: i64 = 10;
 
 fn cell() -> &'static Mutex<Option<Connection>> {
     DB.get_or_init(|| Mutex::new(None))
@@ -354,7 +354,11 @@ CREATE TABLE IF NOT EXISTS sleep_bed(
   session_start_ms INTEGER PRIMARY KEY,
   bed_ms INTEGER,
   fall_asleep_ms INTEGER,
-  wake_ms INTEGER
+  wake_ms INTEGER,
+  duration_min INTEGER,
+  watch_score INTEGER,
+  watch_efficiency INTEGER,
+  watch_wake_count INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS emotion_records(
@@ -538,6 +542,10 @@ CREATE TABLE IF NOT EXISTS sync_changelog(
         ("equipment", "model", "TEXT NOT NULL DEFAULT ''"),
         ("equipment", "purchase_ms", "INTEGER NOT NULL DEFAULT 0"),
         ("equipment", "is_active", "INTEGER NOT NULL DEFAULT 1"),
+        ("sleep_bed", "duration_min", "INTEGER"),
+        ("sleep_bed", "watch_score", "INTEGER"),
+        ("sleep_bed", "watch_efficiency", "INTEGER"),
+        ("sleep_bed", "watch_wake_count", "INTEGER"),
     ] {
         add_column_if_missing(conn, table, column, decl)?;
     }
@@ -853,11 +861,7 @@ fn metric_row(conn: &Connection, day: i64) -> Result<MetricRow> {
     Ok(row.unwrap_or_default())
 }
 
-fn sleep_awakenings_for(
-    conn: &Connection,
-    start_ms: i64,
-    end_ms: i64,
-) -> Result<Option<f64>> {
+fn sleep_awakenings_for(conn: &Connection, start_ms: i64, end_ms: i64) -> Result<Option<f64>> {
     let mut stmt = conn.prepare(
         "SELECT start_ms, end_ms FROM sleep_stages
          WHERE stage = 'awake' AND end_ms > ?1 AND start_ms < ?2
@@ -974,7 +978,16 @@ fn readiness_for(conn: &Connection, day: i64) -> Result<ReadinessScore> {
         None
     };
     let inputs = readiness_inputs_for(conn, &row, day)?;
-    Ok(readiness::compute(&inputs, &baseline, yesterday, now_ms()))
+    let official_sleep_score = sleep_summary_for(conn, day)?
+        .map(|summary| summary.score as f64)
+        .filter(|value| *value > 0.0);
+    Ok(readiness::compute_with_sleep_score(
+        &inputs,
+        &baseline,
+        yesterday,
+        now_ms(),
+        official_sleep_score,
+    ))
 }
 
 pub fn home_summary(day: i64) -> Result<HomeSummary> {
@@ -1652,18 +1665,58 @@ fn valid_sleep_sessions_for(conn: &Connection, day: i64) -> Result<Vec<SleepSess
     Ok(dedupe_sleep_sessions(sessions))
 }
 
+#[derive(Clone, Copy)]
+struct WatchSleepCorrection {
+    duration_min: Option<i64>,
+    score: Option<i64>,
+    efficiency: Option<i64>,
+    wake_count: Option<i64>,
+    wake_ms: Option<i64>,
+}
+
+fn watch_sleep_correction(
+    conn: &Connection,
+    session: &SleepSessionRow,
+) -> Result<Option<WatchSleepCorrection>> {
+    let row = conn
+        .query_row(
+            "SELECT duration_min, watch_score, watch_efficiency, watch_wake_count, wake_ms
+             FROM sleep_bed
+             WHERE COALESCE(fall_asleep_ms, bed_ms, session_start_ms)
+                   BETWEEN ?1 - 3600000 AND ?2
+             ORDER BY ABS(COALESCE(fall_asleep_ms, bed_ms, session_start_ms) - ?1)
+             LIMIT 1",
+            params![session.start_ms, session.end_ms],
+            |r| {
+                Ok(WatchSleepCorrection {
+                    duration_min: r.get(0)?,
+                    score: r.get(1)?,
+                    efficiency: r.get(2)?,
+                    wake_count: r.get(3)?,
+                    wake_ms: r.get(4)?,
+                })
+            },
+        )
+        .optional()?;
+    Ok(row)
+}
+
 fn sleep_summary_for(conn: &Connection, day: i64) -> Result<Option<SleepSummary>> {
     let sessions = valid_sleep_sessions_for(conn, day)?;
     if sessions.is_empty() {
         return Ok(None);
     }
     let deep = sessions.iter().map(|s| s.deep).sum::<f64>();
-    let light = sessions.iter().map(|s| s.light).sum::<f64>();
+    let mut light = sessions.iter().map(|s| s.light).sum::<f64>();
     let rem = sessions.iter().map(|s| s.rem).sum::<f64>();
     let awake = sessions.iter().map(|s| s.awake).sum::<f64>();
-    let asleep = deep + light + rem;
-    let total = asleep + awake;
-    let efficiency = if total > 0.0 {
+    let main_asleep = sessions
+        .iter()
+        .map(SleepSessionRow::asleep)
+        .fold(0.0, f64::max);
+    let mut asleep = deep + light + rem;
+    let mut total = asleep + awake;
+    let mut efficiency = if total > 0.0 {
         (asleep / total * 100.0).round() as i64
     } else {
         0
@@ -1674,10 +1727,46 @@ fn sleep_summary_for(conn: &Connection, day: i64) -> Result<Option<SleepSummary>
         .max_by(|a, b| a.asleep().total_cmp(&b.asleep()))
         .copied()
         .unwrap_or(sessions[0]);
-    let awakenings =
-        sleep_awakenings_for(conn, main.start_ms, main.end_ms)?.unwrap_or(0.0);
-    let score = readiness::sleep_score(asleep, deep, awakenings).round() as i64;
-    let nap_minutes = (asleep - main.asleep()).max(0.0).round() as i64;
+    let mut awakenings = sleep_awakenings_for(conn, main.start_ms, main.end_ms)?.unwrap_or(0.0);
+    let mut score = readiness::sleep_score(asleep, deep, awakenings).round() as i64;
+    let summary_start = main.start_ms;
+    let mut summary_end = main.end_ms;
+
+    // 700013 的分期文件可能在起床后仍晚几分钟才完整。手表摘要里的
+    // 睡眠时长和官方评分是最终口径；缺的分期时长先补到浅睡，避免首页
+    // 把 6h18 截成 4h44，再用自定义公式算出一个很低的伪分数。
+    if let Some(correction) = watch_sleep_correction(conn, &main)? {
+        if let Some(minutes) = correction.duration_min.filter(|v| *v > 0) {
+            let tracked = asleep.round() as i64;
+            let watch_asleep = (minutes as f64 - awake).max(0.0).round() as i64;
+            if watch_asleep > tracked {
+                let missing = (watch_asleep - tracked) as f64;
+                light += missing;
+                asleep += missing;
+                total = asleep + awake;
+                efficiency = if total > 0.0 {
+                    (asleep / total * 100.0).round() as i64
+                } else {
+                    0
+                };
+            }
+            summary_end = summary_end.max(summary_start + minutes * 60_000);
+        }
+        if let Some(wake) = correction.wake_ms.filter(|v| *v > summary_start) {
+            summary_end = summary_end.max(wake);
+        }
+        if let Some(count) = correction.wake_count.filter(|v| *v >= 0) {
+            awakenings = count as f64;
+            score = readiness::sleep_score(asleep, deep, awakenings).round() as i64;
+        }
+        if let Some(official) = correction.score.filter(|v| (1..=100).contains(v)) {
+            score = official;
+        }
+        if let Some(official) = correction.efficiency.filter(|v| (1..=100).contains(v)) {
+            efficiency = official;
+        }
+    }
+    let nap_minutes = (asleep - main_asleep).max(0.0).round() as i64;
     Ok(Some(SleepSummary {
         date_epoch_day: day,
         total_minutes: asleep.round() as i64,
@@ -1686,8 +1775,8 @@ fn sleep_summary_for(conn: &Connection, day: i64) -> Result<Option<SleepSummary>
         rem_minutes: rem.round() as i64,
         awake_minutes: awake.round() as i64,
         nap_minutes,
-        start_ms: main.start_ms,
-        end_ms: main.end_ms,
+        start_ms: summary_start,
+        end_ms: summary_end,
         efficiency,
         score,
     }))
@@ -3502,6 +3591,26 @@ pub fn sleep_detail(day: i64) -> Result<Option<SleepDetail>> {
                 stages.push(row);
             }
         }
+        // 手表详情文件可能比最终睡眠摘要少最后一截。若官方摘要已给出
+        // 6h18，而分钟级分期只画到 4h44，就用浅睡补上尾部空档，保证
+        // 时间轴和顶部总时长一致；下次拿到完整分期时自然被真实数据替代。
+        let tracked_sleep_ms: i64 = stages
+            .iter()
+            .filter(|stage| stage.stage != "awake")
+            .map(|stage| (stage.end_ms - stage.start_ms).max(0))
+            .sum();
+        let missing_ms = summary.total_minutes.saturating_mul(60_000) - tracked_sleep_ms;
+        if missing_ms > 60_000 {
+            if let Some(last) = stages.last() {
+                if summary.end_ms > last.end_ms {
+                    stages.push(SleepStage {
+                        start_ms: last.end_ms,
+                        end_ms: summary.end_ms,
+                        stage: "light".into(),
+                    });
+                }
+            }
+        }
         // 图表窗口按「上床 → 醒来」画，同时必须罩住所有阶段，
         // 否则醒后那段清醒会被裁掉，画布右端也和标签对不上。
         let chart_start = bed_ms.unwrap_or(summary.start_ms);
@@ -4809,6 +4918,46 @@ mod tests {
     }
 
     #[test]
+    fn sleep_summary_uses_watch_duration_and_official_score() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path = std::env::temp_dir().join(format!(
+            "vitaloop-test-watch-sleep-score-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        open(path.to_str().unwrap()).unwrap();
+
+        let day = today_epoch_day();
+        let start = day_start_ms(day) - 60 * 60_000;
+        with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO sleep_sessions(
+                    start_ms, end_ms, deep_min, light_min, rem_min, awake_min, source
+                 ) VALUES(?1, ?2, 67, 160, 57, 26, 'watch')",
+                params![start, start + 310 * 60_000],
+            )?;
+            conn.execute(
+                "INSERT INTO sleep_bed(
+                    session_start_ms, fall_asleep_ms, wake_ms, duration_min,
+                    watch_score, watch_efficiency, watch_wake_count
+                 ) VALUES(?1, ?1, ?2, 397, 79, 91, 3)",
+                params![start, start + 397 * 60_000],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+        let summary = sleep_summary(day).unwrap().unwrap();
+        // 手表时间窗 6h37，其中清醒 26 分钟；睡眠时长为 6h11。
+        assert_eq!(summary.total_minutes, 371);
+        assert_eq!(summary.score, 79);
+        assert_eq!(summary.efficiency, 91);
+        assert_eq!(summary.end_ms, start + 397 * 60_000);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn sleep_summary_adds_afternoon_nap_to_main_sleep() {
         let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let path =
@@ -4934,11 +5083,18 @@ mod tests {
             Ok(())
         })
         .unwrap();
-        assert_eq!(today_minutes(), 25, "三环偏低时不能让刚跑完的 25 分钟变成 10 分钟");
+        assert_eq!(
+            today_minutes(),
+            25,
+            "三环偏低时不能让刚跑完的 25 分钟变成 10 分钟"
+        );
 
         let home = home_summary(day).unwrap();
         assert_eq!(home.exercise_minutes, 25);
-        assert_eq!(home.exercise_goal_min, 30, "运动时长的进度分母是运动时长目标");
+        assert_eq!(
+            home.exercise_goal_min, 30,
+            "运动时长的进度分母是运动时长目标"
+        );
 
         let detail = metric_detail("exercise_minutes", 7).unwrap();
         assert_eq!(detail.label, "运动时长");

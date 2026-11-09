@@ -221,6 +221,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.state.refreshFromLegacyIfNewer();
+      unawaited(WatchBridge.instance.refreshSleepNow());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       unawaited(widget.state.noteLocalChanges());

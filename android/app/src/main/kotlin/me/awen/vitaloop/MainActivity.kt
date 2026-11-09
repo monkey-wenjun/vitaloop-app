@@ -268,7 +268,11 @@ class MainActivity : FlutterActivity() {
                 }
                 "state" -> result.success(manager.state)
                 "sync" -> {
-                    manager.syncOnce(manual = true)
+                    manager.forceSleepSync()
+                    result.success(null)
+                }
+                "refresh_sleep" -> {
+                    manager.forceSleepSync()
                     result.success(null)
                 }
                 "resync" -> {

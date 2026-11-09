@@ -880,6 +880,10 @@ class WatchBridge {
     } catch (_) {}
   }
 
+  Future<void> refreshSleepNow() async {
+    await _method.invokeMethod('refresh_sleep');
+  }
+
   Future<Map<String, dynamic>> watchToolsStatus() async {
     try {
       final raw = await _method.invokeMethod<String>('watch_tools_status');
