@@ -8,6 +8,22 @@ Rust 构建数据核心，支持华为手表直连、运动分析、旧版数据
 > **状态：v0.1 预览版。** 本地记录、华为手表同步、运动分析、数据迁移和导出均可在
 > 不登录的情况下使用。公开源码和构建不包含默认云服务、星历服务、私有域名或凭据。
 
+## 截图
+
+截图来自 Android 开发版，画面中的设备数据仅用于展示。
+
+**亮色主题**
+
+| 体能首页 | 睡眠详情 | 运动 | 数据统计 |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/home-light.png" alt="元环亮色体能首页" width="190"> | <img src="docs/screenshots/sleep-light.png" alt="元环亮色睡眠详情" width="190"> | <img src="docs/screenshots/sport-light.png" alt="元环亮色运动首页" width="190"> | <img src="docs/screenshots/statistics-light.png" alt="元环亮色运动统计" width="190"> |
+
+**暗色主题**
+
+| 体能首页 | 睡眠详情 | 运动 | 数据统计 |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/home-dark.png" alt="元环暗色体能首页" width="190"> | <img src="docs/screenshots/sleep-dark.png" alt="元环暗色睡眠详情" width="190"> | <img src="docs/screenshots/sport-dark.png" alt="元环暗色运动首页" width="190"> | <img src="docs/screenshots/statistics-dark.png" alt="元环暗色运动统计" width="190"> |
+
 ## 功能
 
 - **身心准备度**：综合 HRV、睡眠、静息心率、皮温、压力和运动恢复计算分数。
@@ -16,8 +32,11 @@ Rust 构建数据核心，支持华为手表直连、运动分析、旧版数据
   体重、血压和血糖。
 - **本地存储**：数据先写入设备内的 SQLite，Rust 通过 `rusqlite` 访问。
 - **手表同步**：经典蓝牙 RFCOMM + HiChain 认证，增量同步健康数据和运动记录。
-- **默认地图**：MapLibre + Protomaps PMTiles，提供 Liberty 亮色、Dark 暗色、
-  橙色轨迹、公里编号和道路名称。
+  华为/荣耀设备的认证与配对流程参考
+  [Gadgetbridge 配对指南](https://gadgetbridge.org/basics/pairing/huawei-honor-pairing/)，
+  改编的协议源码继续保留 AGPL-3.0 归属说明。
+- **矢量地图**：配置 PMTiles 瓦片源后使用 MapLibre + Protomaps，提供 Liberty
+  亮色、Dark 暗色、橙色轨迹、公里编号和道路名称。
 - **地图来源可选**：可切换高德栅格底图；腾讯、百度入口保留给配置官方 SDK Key 的构建。
 - **运动详情**：轨迹地图、心率曲线、公里分段、爬升、跑步动态、训练负荷、
   训练计划以及 GPX/TCX 导出。
@@ -34,7 +53,7 @@ Rust 构建数据核心，支持华为手表直连、运动分析、旧版数据
 - 不登录即可完整使用本地功能。
 - 没有配置服务器地址时，账号登录、注册和自动云同步不可用。
 - 星历下载、实时轨迹、语音推流、相机推流和更新检查在配置 URL 前不会联网。
-- 公开版默认地图使用 Protomaps/OpenStreetMap PMTiles 数据；地图瓦片、
+- 公开源码不内置地图瓦片服务地址。用户配置兼容的 PMTiles 瓦片源后，地图、
   地点搜索、路线吸附、天气及用户切换的底图只在对应功能使用时请求。
 - 默认不包含广告 SDK 或产品遥测。
 

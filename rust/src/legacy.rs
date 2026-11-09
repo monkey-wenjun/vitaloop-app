@@ -5834,9 +5834,7 @@ mod tests {
                 .unwrap();
         }
         // 这场已经存在于新版，回填时必须跳过，不能重复。
-        insert
-            .execute(params![at(15, 0), at(15, 20)])
-            .unwrap();
+        insert.execute(params![at(15, 0), at(15, 20)]).unwrap();
         drop(insert);
 
         store::open(db.to_str().unwrap()).unwrap();

@@ -10,6 +10,22 @@ sync, workout analysis, and optional self-hosted services.
 > data migration, and export are usable without an account. The public build
 > contains no default cloud, ephemeris, or private infrastructure endpoint.
 
+## Screenshots
+
+Captured from the Android development build with illustrative device data.
+
+**Light theme**
+
+| Fitness dashboard | Sleep detail | Workout | Statistics |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/home-light.png" alt="Vitaloop fitness dashboard in the light theme" width="190"> | <img src="docs/screenshots/sleep-light.png" alt="Vitaloop sleep detail in the light theme" width="190"> | <img src="docs/screenshots/sport-light.png" alt="Vitaloop workout home in the light theme" width="190"> | <img src="docs/screenshots/statistics-light.png" alt="Vitaloop workout statistics in the light theme" width="190"> |
+
+**Dark theme**
+
+| Fitness dashboard | Sleep detail | Workout | Statistics |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/home-dark.png" alt="Vitaloop fitness dashboard in the dark theme" width="190"> | <img src="docs/screenshots/sleep-dark.png" alt="Vitaloop sleep detail in the dark theme" width="190"> | <img src="docs/screenshots/sport-dark.png" alt="Vitaloop workout home in the dark theme" width="190"> | <img src="docs/screenshots/statistics-dark.png" alt="Vitaloop workout statistics in the dark theme" width="190"> |
+
 ## Features
 
 - Readiness score based on HRV, sleep, resting heart rate, skin temperature,
@@ -19,8 +35,12 @@ sync, workout analysis, and optional self-hosted services.
   temperature, weight, blood pressure, and blood glucose.
 - Local SQLite storage through Rust and `rusqlite`.
 - Huawei watch sync over classic Bluetooth/RFCOMM with HiChain authentication.
-- MapLibre/Protomaps PMTiles basemap by default, with Liberty light and dark
-  styles, orange tracks, numbered kilometer markers, and road labels.
+  Huawei/Honor authentication and pairing follow
+  [Gadgetbridge's pairing guide](https://gadgetbridge.org/basics/pairing/huawei-honor-pairing/),
+  and the adapted protocol sources retain their AGPL-3.0 attribution.
+- MapLibre/Protomaps PMTiles basemap when a tile source is configured, with
+  Liberty light and dark styles, orange tracks, numbered kilometer markers, and
+  road labels.
 - Optional AMap raster basemap. Tencent and Baidu provider entries are reserved
   for builds that configure their official SDK keys.
 - Workout maps, heart-rate curves, splits, elevation, running dynamics, training
@@ -42,9 +62,10 @@ server, private domain, API key, or signing key.
   signs in.
 - Ephemeris download, live track sharing, voice streaming, camera streaming, and
   update checks remain unavailable until a URL is configured.
-- The public default map uses Protomaps/OpenStreetMap PMTiles data. Map tiles,
-  place search, routing, weather, and any provider selected by the user are
-  requested only when the related feature is used.
+- The public source ships without a map tile endpoint. After the user configures
+  a compatible PMTiles source, map tiles, place search, routing, weather, and
+  any provider selected by the user are requested only when the related feature
+  is used.
 - No advertising SDK or product telemetry is included by default.
 
 Read [PRIVACY.md](PRIVACY.md) and [PERMISSIONS.md](PERMISSIONS.md) before

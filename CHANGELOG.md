@@ -19,6 +19,10 @@
 
 ### Changed
 
+- Added light- and dark-theme screenshots and linked the Gadgetbridge
+  Huawei/Honor pairing guide from the bilingual READMEs.
+- Synced the latest private-repository sleep and sync fixes while keeping the
+  public build free of private domains and release credentials.
 - Prepared a sanitized public repository with bilingual READMEs, privacy and
   permission documentation, third-party notices, CI, Dependabot, issue/PR
   templates, and environment-based cloud/signing configuration.

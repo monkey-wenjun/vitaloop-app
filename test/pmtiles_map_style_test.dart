@@ -41,4 +41,10 @@ void main() {
     expect(style['sources'], isEmpty);
     expect(style['layers'], hasLength(1));
   });
+
+  test('未配置瓦片服务时不生成网络瓦片源', () {
+    final style = pmtilesMapStyle(sourceUrl: '');
+    expect(style['sources'], isEmpty);
+    expect(style['layers'], hasLength(1));
+  });
 }

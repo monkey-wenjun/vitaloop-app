@@ -39,7 +39,8 @@ Map<String, Object?> pmtilesMapStyle({
       'paint': {'background-color': c['background']},
     },
   ];
-  if (showBaseMap) {
+  final hasBaseSource = showBaseMap && sourceUrl.trim().isNotEmpty;
+  if (hasBaseSource) {
     layers.addAll(_baseLayers(c: c));
   }
   final vectorSource = sourceUrl.contains('.pmtiles')
@@ -58,7 +59,7 @@ Map<String, Object?> pmtilesMapStyle({
   return {
     'version': 8,
     'glyphs': 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-    'sources': showBaseMap ? {'protomaps': vectorSource} : const {},
+    'sources': hasBaseSource ? {'protomaps': vectorSource} : const {},
     'layers': layers,
   };
 }

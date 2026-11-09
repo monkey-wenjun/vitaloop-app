@@ -67,9 +67,7 @@ fn table_columns(conn: &rusqlite::Connection, table: &str) -> Result<Vec<String>
 
 fn table_pk_columns(conn: &rusqlite::Connection, table: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", quote_ident(table)))?;
-    let rows = stmt.query_map([], |r| {
-        Ok((r.get::<_, String>(1)?, r.get::<_, i64>(5)?))
-    })?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(1)?, r.get::<_, i64>(5)?)))?;
     let mut keys = rows
         .collect::<rusqlite::Result<Vec<_>>>()?
         .into_iter()
@@ -244,10 +242,9 @@ fn export_account_delta_inner(since_seq: i64, limit: Option<i64>) -> Result<Stri
             ))
         };
         let rows = match limit {
-            Some(limit) => {
-                stmt.query_map(rusqlite::params![since_seq, limit], mapper)?
-                    .collect::<std::result::Result<Vec<_>, _>>()?
-            }
+            Some(limit) => stmt
+                .query_map(rusqlite::params![since_seq, limit], mapper)?
+                .collect::<std::result::Result<Vec<_>, _>>()?,
             None => stmt
                 .query_map(rusqlite::params![since_seq], mapper)?
                 .collect::<std::result::Result<Vec<_>, _>>()?,
@@ -311,10 +308,7 @@ fn export_account_delta_inner(since_seq: i64, limit: Option<i64>) -> Result<Stri
                     "SELECT {select} FROM {} WHERE {where_sql}",
                     quote_ident(table)
                 );
-                let params = key
-                    .iter()
-                    .map(json_to_value)
-                    .collect::<Result<Vec<_>>>()?;
+                let params = key.iter().map(json_to_value).collect::<Result<Vec<_>>>()?;
                 let mut stmt = conn.prepare(&sql)?;
                 let found = stmt
                     .query_row(rusqlite::params_from_iter(params.iter()), |row| {
@@ -582,9 +576,7 @@ pub fn local_data_count() -> Result<i64> {
 /// SQLite 的 total_changes() 统计当前连接自打开以来的增删改行数。
 /// 每分钟同步前拿它和上次成功同步后的值比较，没写库就不碰 85MB 快照。
 pub fn account_data_change_count() -> Result<i64> {
-    store::with_conn(|conn| {
-        Ok(conn.query_row("SELECT total_changes()", [], |r| r.get(0))?)
-    })
+    store::with_conn(|conn| Ok(conn.query_row("SELECT total_changes()", [], |r| r.get(0))?))
 }
 
 #[cfg(test)]
@@ -604,10 +596,8 @@ mod tests {
     #[test]
     fn delta_export_only_returns_changes_after_cursor() {
         let _guard = store::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let path = std::env::temp_dir().join(format!(
-            "vitaloop-cloud-delta-{}.db",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("vitaloop-cloud-delta-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&path);
         store::open(path.to_str().unwrap()).unwrap();
         store::with_conn(|conn| {

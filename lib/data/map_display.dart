@@ -31,7 +31,7 @@ class MapDisplaySettings extends ChangeNotifier {
   bool _loaded = false;
   bool _defaultsLoaded = false;
 
-  static const defaultPmtilesUrl = 'https://sync.example.com';
+  static const defaultPmtilesUrl = '';
 
   Future<void> load() async {
     if (_loaded) return;
@@ -54,10 +54,7 @@ class MapDisplaySettings extends ChangeNotifier {
         (item) => item.name == providerName,
         orElse: () => MapBaseProvider.pmtiles,
       );
-      pmtilesUrl = await VitaloopApi.setting(
-        'map_pmtiles_url',
-        pmtilesUrl,
-      );
+      pmtilesUrl = await VitaloopApi.setting('map_pmtiles_url', pmtilesUrl);
       offlineCityEnabled =
           await VitaloopApi.setting(
             'map_offline_city',
