@@ -248,6 +248,11 @@ class WatchBridge {
         }
         if (t == 'sync_done') {
           lastSync.value = DateTime.now();
+          // 睡眠详情文件在主同步完成后异步下载、解析并落库。这里再补一次
+          // 延迟刷新，避免最后一笔 sleep_segment 早于 UI 刷新时首页长期停在 "--"。
+          Timer(const Duration(seconds: 8), () {
+            unawaited(_appState?.refresh() ?? Future<void>.value());
+          });
         }
         if (t == 'watch_tools') {
           watchTools.value =

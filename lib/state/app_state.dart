@@ -208,7 +208,13 @@ class AppState extends ChangeNotifier {
 
   /// 应用回到前台时，如果 legacy/ 下的旧版数据库被更新过，自动重新导入。
   Future<void> refreshFromLegacyIfNewer() async {
-    if (await _importLegacyIfNeeded()) await refresh();
+    try {
+      await _importLegacyIfNeeded();
+    } finally {
+      // 手表后台同步可能已经直接写入新库，legacy 文件却没有变化。
+      // 回到前台/定时检查时始终重查一次首页，否则睡眠卡片会一直停在旧值。
+      await refresh();
+    }
   }
 
   /// App 退到后台时只写一个待同步标记；真正的 85MB 快照留给前台/定时器，
