@@ -1,0 +1,1835 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#edf0f8">
+  <meta name="color-scheme" content="light dark">
+  <title>Vitaloop · 睡眠图表重设计</title>
+  <style>
+    :root {
+      --bg: #edf0f8;
+      --bg-glow: #f5f1ff;
+      --surface: #ffffff;
+      --surface-soft: #f7f8fc;
+      --surface-strong: #11182b;
+      --ink: #111729;
+      --ink-2: #525d73;
+      --muted: #657086;
+      --line: rgba(17, 23, 41, 0.08);
+      --line-strong: rgba(17, 23, 41, 0.13);
+      --purple: #7357e7;
+      --purple-deep: #5541c7;
+      --purple-soft: #eee9ff;
+      --deep: #6552d8;
+      --deep-soft: #e8e3ff;
+      --light: #a794f5;
+      --light-soft: #f0ecff;
+      --rem: #25aaa8;
+      --rem-soft: #dff7f4;
+      --awake: #f28b62;
+      --awake-soft: #fff0e9;
+      --mint: #276b54;
+      --mint-soft: #e5f6ee;
+      --warn: #a15c14;
+      --warn-soft: #fff1dc;
+      --shadow: 0 22px 70px rgba(42, 48, 82, 0.10);
+      --shadow-soft: 0 10px 32px rgba(42, 48, 82, 0.07);
+      --radius-xl: 30px;
+      --radius-lg: 24px;
+      --radius-md: 17px;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC",
+        "Hiragino Sans GB", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0c1322;
+      --bg-glow: #17203a;
+      --surface: #121b2c;
+      --surface-soft: #172134;
+      --surface-strong: #eef3ff;
+      --ink: #eef3ff;
+      --ink-2: #b5c0d4;
+      --muted: #8390a8;
+      --line: rgba(255, 255, 255, 0.075);
+      --line-strong: rgba(255, 255, 255, 0.13);
+      --purple: #9f8aff;
+      --purple-deep: #bbaaff;
+      --purple-soft: #272040;
+      --deep: #a694ff;
+      --deep-soft: #292342;
+      --light: #c0b3ff;
+      --light-soft: #24203a;
+      --rem: #62d7d0;
+      --rem-soft: #153431;
+      --awake: #ffa47d;
+      --awake-soft: #3a251e;
+      --mint: #85ddb8;
+      --mint-soft: #17362c;
+      --warn: #f0bc7a;
+      --warn-soft: #352818;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+      --shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.20);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--bg);
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--font);
+      background:
+        radial-gradient(circle at 12% -5%, var(--bg-glow) 0, transparent 31rem),
+        radial-gradient(circle at 96% 30%, rgba(85, 65, 199, 0.07) 0, transparent 28rem),
+        var(--bg);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    button,
+    summary {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button,
+    [role="button"] {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button,
+    summary {
+      touch-action: manipulation;
+    }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: 12px;
+      left: 12px;
+      padding: 10px 14px;
+      color: white;
+      border-radius: 10px;
+      background: var(--purple-deep);
+      font-size: 12px;
+      font-weight: 760;
+      transform: translateY(-160%);
+      transition: transform 140ms ease;
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    :focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--purple) 72%, white);
+      outline-offset: 3px;
+    }
+
+    .page {
+      width: min(100%, 1160px);
+      margin: 0 auto;
+      padding:
+        max(28px, env(safe-area-inset-top))
+        max(24px, env(safe-area-inset-right))
+        max(56px, env(safe-area-inset-bottom))
+        max(24px, env(safe-area-inset-left));
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      place-items: center;
+      color: white;
+      border-radius: 15px;
+      background:
+        radial-gradient(circle at 68% 24%, rgba(255, 255, 255, 0.48), transparent 28%),
+        linear-gradient(145deg, #9b88ff, #5541c7 68%, #33258d);
+      box-shadow: 0 9px 24px rgba(85, 65, 199, 0.27);
+    }
+
+    .brand-mark svg {
+      width: 25px;
+      height: 25px;
+    }
+
+    .topbar-copy {
+      min-width: 0;
+      margin-right: auto;
+    }
+
+    .topbar-kicker {
+      margin: 0 0 2px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .topbar-title {
+      margin: 0;
+      font-size: 19px;
+      font-weight: 760;
+      letter-spacing: -0.025em;
+    }
+
+    .topbar-date {
+      margin-left: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .icon-button {
+      display: inline-grid;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: color-mix(in srgb, var(--surface) 82%, transparent);
+      box-shadow: 0 6px 20px rgba(29, 34, 60, 0.05);
+      cursor: pointer;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+      backdrop-filter: blur(12px);
+    }
+
+    .icon-button:hover {
+      border-color: var(--line-strong);
+      background: var(--surface);
+      transform: translateY(-1px);
+    }
+
+    .icon-button svg {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 154px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 28px;
+      margin-bottom: 18px;
+      padding: 28px 32px;
+      border: 1px solid color-mix(in srgb, var(--purple) 14%, var(--line));
+      border-radius: var(--radius-xl);
+      background:
+        radial-gradient(circle at 90% 8%, rgba(151, 132, 255, 0.22), transparent 22rem),
+        linear-gradient(135deg, color-mix(in srgb, var(--surface) 96%, var(--purple-soft)), var(--surface));
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      z-index: 0;
+      top: -84px;
+      right: 120px;
+      width: 230px;
+      height: 230px;
+      border: 1px solid rgba(143, 126, 244, 0.18);
+      border-radius: 50%;
+      box-shadow:
+        0 0 0 24px rgba(143, 126, 244, 0.035),
+        0 0 0 52px rgba(143, 126, 244, 0.025);
+      pointer-events: none;
+    }
+
+    .score-ring {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      width: 138px;
+      height: 138px;
+      place-items: center;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, var(--surface) 0 55%, transparent 56%),
+        conic-gradient(from 208deg, #7460e8 0 74%, #d7cffb 74% 88%, var(--surface-soft) 88%);
+      box-shadow:
+        inset 0 0 0 1px var(--line),
+        0 16px 38px rgba(99, 79, 204, 0.12);
+    }
+
+    .score-ring::after {
+      content: "";
+      position: absolute;
+      inset: 9px;
+      border: 1px solid color-mix(in srgb, var(--surface) 75%, transparent);
+      border-radius: inherit;
+    }
+
+    .score-value {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      line-height: 1;
+    }
+
+    .score-value strong {
+      display: block;
+      font-size: 38px;
+      font-weight: 790;
+      letter-spacing: -0.06em;
+    }
+
+    .score-value span {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+      min-width: 0;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 0 0 8px;
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 730;
+    }
+
+    .eyebrow-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 4px var(--mint-soft);
+    }
+
+    .sleep-duration {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 0;
+      font-size: clamp(44px, 6vw, 64px);
+      font-weight: 770;
+      letter-spacing: -0.075em;
+      line-height: 0.96;
+    }
+
+    .sleep-duration .unit {
+      margin-right: 5px;
+      color: var(--ink-2);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .sleep-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      margin: 13px 0 0;
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .sleep-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sleep-meta span + span::before {
+      content: "";
+      width: 3px;
+      height: 3px;
+      margin-right: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+      opacity: 0.65;
+    }
+
+    .hero-side {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 8px 12px;
+      color: var(--mint);
+      border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent);
+      border-radius: 999px;
+      background: var(--mint-soft);
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .status-chip svg {
+      width: 15px;
+      height: 15px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .efficiency {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 690;
+      text-align: right;
+    }
+
+    .efficiency strong {
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 780;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: minmax(0, 1.75fr) minmax(300px, 0.82fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .card {
+      min-width: 0;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 770;
+      letter-spacing: -0.025em;
+    }
+
+    .card-header p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+
+    .card-kicker {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 780;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .legend-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-soft);
+      color: var(--ink-2);
+      font-size: 10.5px;
+      font-weight: 690;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 3px;
+      background: var(--stage);
+    }
+
+    .legend-chip b {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chart-wrap {
+      position: relative;
+    }
+
+    .hypnogram {
+      --label-width: 44px;
+      position: relative;
+      touch-action: pan-y;
+    }
+
+    .hypnogram-body {
+      display: grid;
+      grid-template-columns: var(--label-width) minmax(0, 1fr);
+      gap: 9px;
+    }
+
+    .stage-labels {
+      display: grid;
+      grid-template-rows: repeat(4, 44px);
+      padding-top: 2px;
+    }
+
+    .stage-label {
+      display: flex;
+      align-items: center;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 720;
+      letter-spacing: 0.02em;
+    }
+
+    .lane-stack {
+      position: relative;
+      display: grid;
+      grid-template-rows: repeat(4, 44px);
+      padding-top: 2px;
+      border-radius: 12px;
+      background: linear-gradient(90deg, var(--surface-soft), color-mix(in srgb, var(--surface-soft) 65%, transparent));
+    }
+
+    .lane {
+      position: relative;
+      min-width: 0;
+      border-top: 1px dashed var(--line);
+    }
+
+    .lane:first-child {
+      border-top: 0;
+    }
+
+    .sleep-segment {
+      position: absolute;
+      top: 9px;
+      height: 25px;
+      min-width: 3px;
+      border: 1px solid color-mix(in srgb, var(--segment-color) 72%, transparent);
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent),
+        var(--segment-color);
+      box-shadow: 0 5px 12px color-mix(in srgb, var(--segment-color) 20%, transparent);
+      cursor: crosshair;
+      transform-origin: left center;
+      animation: segment-in 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      transition: filter 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+    }
+
+    .sleep-segment:hover,
+    .sleep-segment.is-active {
+      z-index: 2;
+      filter: saturate(1.12) brightness(1.02);
+      transform: scaleY(1.16);
+      box-shadow: 0 7px 18px color-mix(in srgb, var(--segment-color) 32%, transparent);
+    }
+
+    .sleep-segment[data-stage="awake"] {
+      --segment-color: var(--awake);
+    }
+
+    .sleep-segment[data-stage="rem"] {
+      --segment-color: var(--rem);
+    }
+
+    .sleep-segment[data-stage="light"] {
+      --segment-color: var(--light);
+    }
+
+    .sleep-segment[data-stage="deep"] {
+      --segment-color: var(--deep);
+    }
+
+    .grid-lines {
+      position: absolute;
+      inset: 2px 0 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .grid-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--line);
+    }
+
+    .grid-line.major {
+      background: var(--line-strong);
+    }
+
+    .time-axis {
+      position: relative;
+      height: 31px;
+      margin: 3px 0 0 calc(var(--label-width) + 9px);
+    }
+
+    .time-label {
+      position: absolute;
+      top: 10px;
+      color: var(--muted);
+      font-size: 9.5px;
+      font-weight: 680;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      transform: translateX(-50%);
+    }
+
+    .time-label:first-child {
+      transform: none;
+    }
+
+    .time-label:last-child {
+      transform: translateX(-100%);
+    }
+
+    .chart-tooltip {
+      position: absolute;
+      z-index: 8;
+      top: 0;
+      left: 0;
+      min-width: 142px;
+      max-width: 200px;
+      padding: 10px 12px;
+      color: var(--ink);
+      border: 1px solid var(--line-strong);
+      border-radius: 13px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      box-shadow: 0 14px 38px rgba(22, 27, 50, 0.17);
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, calc(-100% - 14px)) scale(0.96);
+      transition: opacity 120ms ease, transform 120ms ease;
+      backdrop-filter: blur(14px);
+    }
+
+    .chart-tooltip.is-visible {
+      opacity: 1;
+      transform: translate(-50%, calc(-100% - 14px)) scale(1);
+    }
+
+    .tooltip-stage {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 5px;
+      font-size: 11px;
+      font-weight: 780;
+    }
+
+    .tooltip-stage span {
+      width: 8px;
+      height: 8px;
+      border-radius: 3px;
+      background: var(--tooltip-color);
+    }
+
+    .tooltip-time {
+      color: var(--ink-2);
+      font-size: 10px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tooltip-duration {
+      margin-top: 3px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 760;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chart-hint {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 0;
+      padding-top: 13px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 10px;
+      font-weight: 620;
+    }
+
+    .chart-hint svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    details {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    summary {
+      display: flex;
+      align-items: center;
+      min-height: 44px;
+      color: var(--ink-2);
+      font-size: 10.5px;
+      font-weight: 720;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    summary::after {
+      content: "+";
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    details[open] summary::after {
+      content: "−";
+    }
+
+    .stage-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stage-table th,
+    .stage-table td {
+      padding: 8px 6px;
+      border-top: 1px solid var(--line);
+      text-align: left;
+    }
+
+    .stage-table th {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .stage-table td:nth-child(n+2),
+    .stage-table th:nth-child(n+2) {
+      text-align: right;
+    }
+
+    .composition-main {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 1px 0 14px;
+    }
+
+    .composition-main strong {
+      font-size: 34px;
+      font-weight: 780;
+      letter-spacing: -0.06em;
+      line-height: 1;
+    }
+
+    .composition-main span {
+      color: var(--muted);
+      font-size: 10.5px;
+      font-weight: 680;
+    }
+
+    .stage-bar {
+      display: flex;
+      overflow: hidden;
+      height: 15px;
+      gap: 2px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .stage-bar span {
+      height: 100%;
+      min-width: 3px;
+      background: var(--stage-color);
+      animation: bar-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      transform-origin: left;
+    }
+
+    .stage-list {
+      display: grid;
+      gap: 2px;
+    }
+
+    .stage-item {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .stage-item:last-child {
+      border-bottom: 0;
+    }
+
+    .stage-swatch {
+      width: 8px;
+      height: 22px;
+      border-radius: 5px;
+      background: var(--stage-color);
+    }
+
+    .stage-name {
+      color: var(--ink-2);
+      font-size: 11px;
+      font-weight: 710;
+    }
+
+    .stage-time {
+      color: var(--ink);
+      font-size: 10.5px;
+      font-weight: 760;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stage-pct {
+      min-width: 35px;
+      color: var(--muted);
+      font-size: 9.5px;
+      font-weight: 700;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .mini-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 13px;
+    }
+
+    .mini-stat {
+      padding: 11px;
+      border-radius: 13px;
+      background: var(--surface-soft);
+    }
+
+    .mini-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 680;
+    }
+
+    .mini-stat strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 770;
+      letter-spacing: -0.01em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .lower-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.75fr) minmax(300px, 0.82fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .week-chart {
+      position: relative;
+      min-height: 218px;
+      padding: 10px 6px 0;
+    }
+
+    .target-line {
+      position: absolute;
+      z-index: 1;
+      top: calc((1 - 450 / 540) * 176px + 10px);
+      right: 0;
+      left: 0;
+      height: 1px;
+      border-top: 1px dashed color-mix(in srgb, var(--purple) 55%, transparent);
+      pointer-events: none;
+    }
+
+    .target-line span {
+      position: absolute;
+      top: -19px;
+      right: 0;
+      padding-left: 7px;
+      color: var(--purple-deep);
+      background: var(--surface);
+      font-size: 9px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .week-bars {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      align-items: end;
+      gap: clamp(7px, 2vw, 20px);
+      height: 176px;
+      margin: 0 26px 0 2px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .week-bar {
+      position: relative;
+      align-self: end;
+      width: min(100%, 44px);
+      height: var(--bar-height);
+      min-height: 48px;
+      margin: 0 auto;
+      padding: 0;
+      border: 0;
+      border-radius: 10px 10px 3px 3px;
+      background: transparent;
+      cursor: pointer;
+      transition: transform 160ms ease, filter 160ms ease;
+    }
+
+    .week-bar:hover,
+    .week-bar:focus-visible {
+      z-index: 4;
+      filter: saturate(1.08);
+      transform: translateY(-4px);
+    }
+
+    .week-stack {
+      display: flex;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      flex-direction: column-reverse;
+      gap: 2px;
+      border-radius: inherit;
+    }
+
+    .week-stack span {
+      display: block;
+      width: 100%;
+      background: var(--stage-color);
+    }
+
+    .week-bar.is-today .week-stack {
+      outline: 2px solid color-mix(in srgb, var(--purple) 24%, transparent);
+      outline-offset: 3px;
+    }
+
+    .bar-tooltip {
+      position: absolute;
+      z-index: 8;
+      bottom: calc(100% + 11px);
+      left: 50%;
+      display: none;
+      width: max-content;
+      max-width: 190px;
+      padding: 9px 11px;
+      color: var(--ink);
+      border: 1px solid var(--line-strong);
+      border-radius: 11px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.45;
+      text-align: left;
+      pointer-events: none;
+      transform: translate(-50%, 4px);
+      transition: opacity 130ms ease, transform 130ms ease;
+    }
+
+    .week-bar:hover .bar-tooltip,
+    .week-bar:focus-visible .bar-tooltip {
+      display: block;
+      transform: translate(-50%, 0);
+    }
+
+    .week-bar:first-child .bar-tooltip {
+      left: 0;
+      transform: translate(0, 4px);
+    }
+
+    .week-bar:first-child:hover .bar-tooltip,
+    .week-bar:first-child:focus-visible .bar-tooltip {
+      transform: translate(0, 0);
+    }
+
+    .week-bar:nth-last-child(-n+2) .bar-tooltip {
+      right: 0;
+      left: auto;
+      transform: translate(0, 4px);
+    }
+
+    .week-bar:nth-last-child(-n+2):hover .bar-tooltip,
+    .week-bar:nth-last-child(-n+2):focus-visible .bar-tooltip {
+      transform: translate(0, 0);
+    }
+
+    .week-days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: clamp(7px, 2vw, 20px);
+      margin: 0 26px 0 2px;
+      padding-top: 10px;
+    }
+
+    .week-days span {
+      color: var(--muted);
+      font-size: 9.5px;
+      font-weight: 690;
+      text-align: center;
+    }
+
+    .week-days span:last-child {
+      color: var(--purple-deep);
+      font-weight: 780;
+    }
+
+    .insight-list {
+      display: grid;
+      gap: 4px;
+    }
+
+    .insight {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr);
+      gap: 11px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .insight:last-child {
+      border-bottom: 0;
+    }
+
+    .insight-icon {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      color: var(--insight-color);
+      border-radius: 13px;
+      background: var(--insight-bg);
+    }
+
+    .insight-icon svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .insight-copy strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 11px;
+      font-weight: 770;
+      letter-spacing: -0.01em;
+    }
+
+    .insight-copy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 590;
+      line-height: 1.5;
+    }
+
+    .footer-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      margin-top: 20px;
+      padding: 0 4px;
+      color: var(--muted);
+      font-size: 9.5px;
+      font-weight: 610;
+      line-height: 1.5;
+    }
+
+    @keyframes segment-in {
+      from {
+        opacity: 0;
+        transform: scaleX(0.55);
+      }
+      to {
+        opacity: 1;
+        transform: scaleX(1);
+      }
+    }
+
+    @keyframes bar-in {
+      from {
+        opacity: 0.4;
+        transform: scaleX(0);
+      }
+      to {
+        opacity: 1;
+        transform: scaleX(1);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .page {
+        width: min(100%, 720px);
+        padding-inline: 18px;
+      }
+
+      .hero {
+        grid-template-columns: 132px minmax(0, 1fr);
+        gap: 22px;
+      }
+
+      .score-ring {
+        width: 120px;
+        height: 120px;
+      }
+
+      .hero-side {
+        grid-column: 2;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .efficiency {
+        text-align: left;
+      }
+
+      .dashboard,
+      .lower-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .page {
+        padding:
+          max(17px, env(safe-area-inset-top))
+          max(12px, env(safe-area-inset-right))
+          max(38px, env(safe-area-inset-bottom))
+          max(12px, env(safe-area-inset-left));
+      }
+
+      .topbar {
+        gap: 10px;
+        margin-bottom: 14px;
+        padding: 0 2px;
+      }
+
+      .brand-mark {
+        width: 40px;
+        height: 40px;
+        flex-basis: 40px;
+        border-radius: 14px;
+      }
+
+      .topbar-title {
+        font-size: 17px;
+      }
+
+      .topbar-date {
+        display: block;
+        margin: 2px 0 0;
+        font-size: 10.5px;
+      }
+
+      .icon-button {
+        width: 44px;
+        height: 44px;
+      }
+
+      .hero {
+        grid-template-columns: 94px minmax(0, 1fr);
+        gap: 15px;
+        padding: 21px 18px 19px;
+        border-radius: 25px;
+      }
+
+      .hero::after {
+        right: -80px;
+      }
+
+      .score-ring {
+        width: 92px;
+        height: 92px;
+      }
+
+      .score-value strong {
+        font-size: 29px;
+      }
+
+      .score-value span {
+        margin-top: 4px;
+        font-size: 8px;
+      }
+
+      .eyebrow {
+        margin-bottom: 6px;
+        font-size: 10.5px;
+      }
+
+      .sleep-duration {
+        gap: 5px;
+        font-size: 41px;
+      }
+
+      .sleep-duration .unit {
+        font-size: 10.5px;
+      }
+
+      .sleep-meta {
+        gap: 5px 10px;
+        margin-top: 9px;
+        font-size: 10px;
+      }
+
+      .sleep-meta span + span::before {
+        margin-right: 3px;
+      }
+
+      .hero-side {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+        gap: 12px;
+        margin-top: -2px;
+      }
+
+      .status-chip {
+        min-height: 31px;
+        padding: 7px 10px;
+        font-size: 10px;
+      }
+
+      .efficiency {
+        font-size: 10px;
+      }
+
+      .efficiency strong {
+        font-size: 15px;
+      }
+
+      .card {
+        padding: 17px 14px;
+        border-radius: 22px;
+      }
+
+      .card-header {
+        margin-bottom: 15px;
+      }
+
+      .card-header p {
+        max-width: 210px;
+      }
+
+      .legend {
+        gap: 6px;
+        margin-bottom: 13px;
+      }
+
+      .legend-chip {
+        gap: 5px;
+        min-height: 28px;
+        padding: 5px 8px;
+        font-size: 9.5px;
+      }
+
+      .hypnogram {
+        --label-width: 38px;
+      }
+
+      .stage-labels,
+      .lane-stack {
+        grid-template-rows: repeat(4, 42px);
+      }
+
+      .stage-label {
+        font-size: 9px;
+      }
+
+      .sleep-segment {
+        top: 8px;
+        height: 24px;
+        border-radius: 7px;
+      }
+
+      .time-label {
+        font-size: 8.5px;
+      }
+
+      .time-label.optional {
+        display: none;
+      }
+
+      .week-bars,
+      .week-days {
+        gap: 6px;
+        margin-right: 4px;
+      }
+
+      .target-line span {
+        font-size: 8.5px;
+      }
+
+      .footer-note {
+        flex-direction: column;
+        gap: 4px;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .topbar-date {
+        display: none;
+      }
+
+      .hero {
+        grid-template-columns: 84px minmax(0, 1fr);
+        padding-inline: 15px;
+      }
+
+      .score-ring {
+        width: 82px;
+        height: 82px;
+      }
+
+      .score-value strong {
+        font-size: 26px;
+      }
+
+      .sleep-duration {
+        font-size: 36px;
+      }
+
+      .legend-chip:nth-child(3) {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <main class="page" id="main-content">
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M16.8 4.9A7.8 7.8 0 1 0 20 15.2a6.2 6.2 0 0 1-3.2-10.3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          <path d="M5 18.5c2.1-1.5 4.4-1.5 6.5 0s4.4 1.5 6.5 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="topbar-copy">
+        <p class="topbar-kicker">Vitaloop</p>
+        <h1 class="topbar-title">睡眠<span class="topbar-date">11月8日 · 周日</span></h1>
+      </div>
+      <button class="icon-button" id="theme-toggle" type="button" aria-label="切换到深色模式" title="切换主题">
+        <svg id="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20.5 14.1A8.2 8.2 0 0 1 9.9 3.5 8.3 8.3 0 1 0 20.5 14.1Z"/>
+        </svg>
+      </button>
+      <button class="icon-button" type="button" aria-label="更多睡眠设置" title="更多设置">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+          <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+          <circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+    </header>
+
+    <section class="hero" aria-labelledby="sleep-summary">
+      <div class="score-ring" role="img" aria-label="睡眠评分 88 分">
+        <div class="score-value">
+          <strong>88</strong>
+          <span>睡眠评分</span>
+        </div>
+      </div>
+      <div class="hero-copy">
+        <p class="eyebrow" id="sleep-summary"><span class="eyebrow-dot" aria-hidden="true"></span>昨晚睡眠 · 恢复良好</p>
+        <p class="sleep-duration" aria-label="睡眠时长 7 小时 42 分钟">
+          <span>7</span><span class="unit">小时</span><span>42</span><span class="unit">分钟</span>
+        </p>
+        <p class="sleep-meta">
+          <span>23:12 入睡</span>
+          <span>07:19 醒来</span>
+          <span>夜醒 3 次</span>
+        </p>
+      </div>
+      <div class="hero-side">
+        <span class="status-chip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 13 5 5L20 7"/></svg>
+          比 7 日均值多 26 分钟
+        </span>
+        <div class="efficiency">睡眠效率 <strong>95%</strong></div>
+      </div>
+    </section>
+
+    <div class="dashboard">
+      <section class="card" aria-labelledby="night-rhythm-title">
+        <header class="card-header">
+          <div>
+            <h2 id="night-rhythm-title">夜间节律</h2>
+            <p>4 个阶段按时间依次展开，色块长度对应实际停留时长。</p>
+          </div>
+          <span class="card-kicker">23:12 — 07:19</span>
+        </header>
+
+        <div class="legend" aria-label="睡眠阶段汇总">
+          <span class="legend-chip" style="--stage: var(--awake)"><i class="legend-dot" aria-hidden="true"></i>清醒 <b>25m</b></span>
+          <span class="legend-chip" style="--stage: var(--rem)"><i class="legend-dot" aria-hidden="true"></i>REM <b>1h 58m</b></span>
+          <span class="legend-chip" style="--stage: var(--light)"><i class="legend-dot" aria-hidden="true"></i>浅睡 <b>3h 32m</b></span>
+          <span class="legend-chip" style="--stage: var(--deep)"><i class="legend-dot" aria-hidden="true"></i>深睡 <b>2h 12m</b></span>
+        </div>
+
+        <div class="chart-wrap">
+          <div class="hypnogram" id="hypnogram" aria-describedby="chart-hint">
+            <div class="hypnogram-body">
+              <div class="stage-labels" aria-hidden="true">
+                <span class="stage-label">清醒</span>
+                <span class="stage-label">REM</span>
+                <span class="stage-label">浅睡</span>
+                <span class="stage-label">深睡</span>
+              </div>
+              <div class="lane-stack">
+                <div class="grid-lines" id="grid-lines" aria-hidden="true"></div>
+                <div class="lane" id="lane-awake"></div>
+                <div class="lane" id="lane-rem"></div>
+                <div class="lane" id="lane-light"></div>
+                <div class="lane" id="lane-deep"></div>
+              </div>
+            </div>
+            <div class="time-axis" id="time-axis" aria-hidden="true"></div>
+          </div>
+          <div class="chart-tooltip" id="chart-tooltip" role="status" aria-live="polite"></div>
+        </div>
+
+        <p class="chart-hint" id="chart-hint">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v.01M9.2 9.2a3 3 0 1 1 4.6 2.5c-1 .7-1.8 1.2-1.8 2.5"/><circle cx="12" cy="12" r="9"/></svg>
+          悬停或轻触色块查看阶段、时间与时长；键盘用户可展开下方明细。
+        </p>
+
+        <details>
+          <summary>查看完整分期明细</summary>
+          <table class="stage-table">
+            <thead>
+              <tr><th scope="col">阶段</th><th scope="col">开始</th><th scope="col">结束</th><th scope="col">时长</th></tr>
+            </thead>
+            <tbody id="stage-table-body"></tbody>
+          </table>
+        </details>
+      </section>
+
+      <aside class="card" aria-labelledby="composition-title">
+        <header class="card-header">
+          <div>
+            <h2 id="composition-title">分期构成</h2>
+            <p>深睡集中在前半夜，后半夜 REM 更连续。</p>
+          </div>
+        </header>
+
+        <div class="composition-main">
+          <strong>27%</strong>
+          <span>深睡占比</span>
+        </div>
+        <div class="stage-bar" role="img" aria-label="睡眠分期构成：清醒 5%，REM 24%，浅睡 44%，深睡 27%">
+          <span style="--stage-color: var(--awake); width: 5.1%"></span>
+          <span style="--stage-color: var(--rem); width: 24.2%"></span>
+          <span style="--stage-color: var(--light); width: 43.5%"></span>
+          <span style="--stage-color: var(--deep); width: 27.2%"></span>
+        </div>
+
+        <div class="stage-list">
+          <div class="stage-item">
+            <i class="stage-swatch" style="--stage-color: var(--awake)" aria-hidden="true"></i>
+            <span class="stage-name">清醒</span>
+            <span class="stage-time">25 分钟</span>
+            <span class="stage-pct">5%</span>
+          </div>
+          <div class="stage-item">
+            <i class="stage-swatch" style="--stage-color: var(--rem)" aria-hidden="true"></i>
+            <span class="stage-name">REM</span>
+            <span class="stage-time">1 小时 58 分</span>
+            <span class="stage-pct">24%</span>
+          </div>
+          <div class="stage-item">
+            <i class="stage-swatch" style="--stage-color: var(--light)" aria-hidden="true"></i>
+            <span class="stage-name">浅睡</span>
+            <span class="stage-time">3 小时 32 分</span>
+            <span class="stage-pct">44%</span>
+          </div>
+          <div class="stage-item">
+            <i class="stage-swatch" style="--stage-color: var(--deep)" aria-hidden="true"></i>
+            <span class="stage-name">深睡</span>
+            <span class="stage-time">2 小时 12 分</span>
+            <span class="stage-pct">27%</span>
+          </div>
+        </div>
+
+        <div class="mini-stats">
+          <div class="mini-stat"><span>最长连续睡眠</span><strong>3h 41m</strong></div>
+          <div class="mini-stat"><span>夜间平均心率</span><strong>54 bpm</strong></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="lower-grid">
+      <section class="card" aria-labelledby="week-title">
+        <header class="card-header">
+          <div>
+            <h2 id="week-title">近 7 晚</h2>
+            <p>每根柱按深睡、REM 与浅睡堆叠，虚线为 7 小时 30 分目标。</p>
+          </div>
+          <span class="card-kicker">平均 7h 16m</span>
+        </header>
+        <div class="week-chart">
+          <div class="target-line" aria-hidden="true"><span>目标 7h 30m</span></div>
+          <div class="week-bars" id="week-bars"></div>
+          <div class="week-days" aria-hidden="true">
+            <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>今天</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card" aria-labelledby="insight-title">
+        <header class="card-header">
+          <div>
+            <h2 id="insight-title">今夜提示</h2>
+            <p>根据本次睡眠结构与近期基线生成。</p>
+          </div>
+        </header>
+        <div class="insight-list">
+          <div class="insight">
+            <div class="insight-icon" style="--insight-color: var(--purple-deep); --insight-bg: var(--purple-soft)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15c3-5 5 3 8-2s5 1 8-4"/><path d="M4 19h16"/></svg>
+            </div>
+            <div class="insight-copy">
+              <strong>恢复节律良好</strong>
+              <p>深睡比 7 日均值多 12 分钟，主要集中在前半夜。</p>
+            </div>
+          </div>
+          <div class="insight">
+            <div class="insight-icon" style="--insight-color: var(--rem); --insight-bg: var(--rem-soft)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+            </div>
+            <div class="insight-copy">
+              <strong>REM 略低于基线</strong>
+              <p>比近期平均少 8 分钟，今晚可提前 20 分钟入睡。</p>
+            </div>
+          </div>
+          <div class="insight">
+            <div class="insight-icon" style="--insight-color: var(--awake); --insight-bg: var(--awake-soft)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13h3l2-5 3 10 2-5h4"/><path d="M4 20h16"/></svg>
+            </div>
+            <div class="insight-copy">
+              <strong>夜醒集中在 05:00 后</strong>
+              <p>短醒共 3 次，每次不超过 7 分钟，整体影响较小。</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="footer-note">
+      <span>Vitaloop · 睡眠图表重设计预览</span>
+      <span>样例数据，仅用于界面与图表方向评审</span>
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      const startClock = 23 * 60 + 12;
+      const endClock = 7 * 60 + 19;
+      const totalMinutes = endClock + 24 * 60 - startClock;
+
+      const stages = {
+        awake: { label: "清醒", color: "var(--awake)" },
+        rem: { label: "REM", color: "var(--rem)" },
+        light: { label: "浅睡", color: "var(--light)" },
+        deep: { label: "深睡", color: "var(--deep)" }
+      };
+
+      const segments = [
+        ["awake", 8], ["light", 30], ["deep", 41], ["light", 14],
+        ["deep", 27], ["light", 18], ["rem", 13], ["awake", 4],
+        ["light", 25], ["deep", 39], ["light", 11], ["rem", 31],
+        ["light", 17], ["deep", 25], ["light", 16], ["rem", 29],
+        ["awake", 7], ["light", 35], ["rem", 24], ["light", 34],
+        ["rem", 21], ["light", 12], ["awake", 6]
+      ];
+
+      const clockOf = (minuteOfDay) => {
+        const normalized = ((minuteOfDay % 1440) + 1440) % 1440;
+        return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
+      };
+
+      const durationOf = (minutes) => {
+        const hours = Math.floor(minutes / 60);
+        const rest = minutes % 60;
+        if (!hours) return `${rest} 分钟`;
+        if (!rest) return `${hours} 小时`;
+        return `${hours} 小时 ${rest} 分`;
+      };
+
+      const lanes = {
+        awake: document.getElementById("lane-awake"),
+        rem: document.getElementById("lane-rem"),
+        light: document.getElementById("lane-light"),
+        deep: document.getElementById("lane-deep")
+      };
+      const tooltip = document.getElementById("chart-tooltip");
+      const chartWrap = tooltip.parentElement;
+      const tableBody = document.getElementById("stage-table-body");
+      let cursor = 0;
+
+      segments.forEach(([stage, duration], index) => {
+        const from = cursor;
+        const to = cursor + duration;
+        const startTime = clockOf(startClock + from);
+        const endTime = clockOf(startClock + to);
+        const left = (from / totalMinutes) * 100;
+        const width = (duration / totalMinutes) * 100;
+
+        const segment = document.createElement("span");
+        segment.className = "sleep-segment";
+        segment.dataset.stage = stage;
+        segment.dataset.start = startTime;
+        segment.dataset.end = endTime;
+        segment.dataset.duration = durationOf(duration);
+        segment.style.left = `${left}%`;
+        segment.style.width = `${Math.max(width - 0.12, 0.28)}%`;
+        segment.style.animationDelay = `${Math.min(index * 18, 240)}ms`;
+        segment.setAttribute("aria-hidden", "true");
+        segment.title = `${stages[stage].label} ${startTime}–${endTime}，${durationOf(duration)}`;
+        lanes[stage].appendChild(segment);
+
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${stages[stage].label}</td><td>${startTime}</td><td>${endTime}</td><td>${duration}</td>`;
+        tableBody.appendChild(row);
+        cursor = to;
+      });
+
+      const hourMarks = [];
+      for (let minute = 0; minute <= 24 * 60; minute += 60) {
+        const elapsed = (minute - startClock + 24 * 60) % (24 * 60);
+        if (elapsed > 0 && elapsed < totalMinutes) hourMarks.push({ elapsed, label: clockOf(minute), major: true });
+      }
+      const gridLines = document.getElementById("grid-lines");
+      hourMarks.forEach(({ elapsed, major }) => {
+        const line = document.createElement("i");
+        line.className = `grid-line${major ? " major" : ""}`;
+        line.style.left = `${(elapsed / totalMinutes) * 100}%`;
+        gridLines.appendChild(line);
+      });
+
+      const axis = document.getElementById("time-axis");
+      const axisLabels = [
+        { pct: 0, text: "23:12", optional: false },
+        ...hourMarks.filter((mark) => mark.label !== "07:00").map((mark) => ({
+          pct: (mark.elapsed / totalMinutes) * 100,
+          text: mark.label,
+          optional: !["01:00", "03:00", "05:00"].includes(mark.label)
+        })),
+        { pct: 100, text: "07:19", optional: false }
+      ];
+      axisLabels.forEach(({ pct, text, optional }) => {
+        const label = document.createElement("span");
+        label.className = `time-label${optional ? " optional" : ""}`;
+        label.style.left = `${pct}%`;
+        label.textContent = text;
+        axis.appendChild(label);
+      });
+
+      const moveTooltip = (event, segment) => {
+        const rect = segment.getBoundingClientRect();
+        const wrapRect = chartWrap.getBoundingClientRect();
+        const x = event ? event.clientX - wrapRect.left : rect.left - wrapRect.left + rect.width / 2;
+        const y = event ? event.clientY - wrapRect.top : rect.top - wrapRect.top + rect.height / 2;
+        const maxX = Math.max(86, chartWrap.clientWidth - 86);
+        tooltip.style.left = `${Math.min(Math.max(x, 86), maxX)}px`;
+        tooltip.style.top = `${Math.max(y, 64)}px`;
+      };
+
+      const showTooltip = (segment, event) => {
+        const stage = stages[segment.dataset.stage];
+        tooltip.style.setProperty("--tooltip-color", stage.color);
+        tooltip.innerHTML = `
+          <div class="tooltip-stage"><span></span>${stage.label}</div>
+          <div class="tooltip-time">${segment.dataset.start} — ${segment.dataset.end}</div>
+          <div class="tooltip-duration">${segment.dataset.duration}</div>
+        `;
+        document.querySelectorAll(".sleep-segment.is-active").forEach((item) => item.classList.remove("is-active"));
+        segment.classList.add("is-active");
+        moveTooltip(event, segment);
+        tooltip.classList.add("is-visible");
+      };
+
+      const hideTooltip = () => {
+        tooltip.classList.remove("is-visible");
+        document.querySelectorAll(".sleep-segment.is-active").forEach((item) => item.classList.remove("is-active"));
+      };
+
+      chartWrap.addEventListener("pointerover", (event) => {
+        const segment = event.target.closest(".sleep-segment");
+        if (segment) showTooltip(segment, event);
+      });
+      chartWrap.addEventListener("pointermove", (event) => {
+        const segment = event.target.closest(".sleep-segment");
+        if (segment && tooltip.classList.contains("is-visible")) moveTooltip(event, segment);
+      });
+      chartWrap.addEventListener("pointerout", (event) => {
+        const segment = event.target.closest(".sleep-segment");
+        if (segment && !segment.contains(event.relatedTarget)) hideTooltip();
+      });
+      chartWrap.addEventListener("pointerdown", (event) => {
+        const segment = event.target.closest(".sleep-segment");
+        if (segment) showTooltip(segment, event);
+      });
+      window.addEventListener("scroll", hideTooltip, { passive: true });
+
+      const week = [
+        { day: "周一", total: 420, stages: { deep: 95, rem: 96, light: 229 } },
+        { day: "周二", total: 432, stages: { deep: 105, rem: 110, light: 217 } },
+        { day: "周三", total: 447, stages: { deep: 124, rem: 107, light: 216 } },
+        { day: "周四", total: 438, stages: { deep: 112, rem: 101, light: 225 } },
+        { day: "周五", total: 444, stages: { deep: 114, rem: 119, light: 211 } },
+        { day: "周六", total: 435, stages: { deep: 108, rem: 113, light: 214 } },
+        { day: "今天", total: 462, stages: { deep: 132, rem: 118, light: 212 } }
+      ];
+      const weekBars = document.getElementById("week-bars");
+      week.forEach((item, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `week-bar${index === week.length - 1 ? " is-today" : ""}`;
+        button.style.setProperty("--bar-height", `${(item.total / 540) * 100}%`);
+        button.setAttribute("aria-label", `${item.day}，睡眠 ${durationOf(item.total)}，深睡 ${durationOf(item.stages.deep)}，REM ${durationOf(item.stages.rem)}，浅睡 ${durationOf(item.stages.light)}`);
+        button.innerHTML = `
+          <span class="week-stack" aria-hidden="true">
+            <span style="--stage-color: var(--deep); flex: ${item.stages.deep}"></span>
+            <span style="--stage-color: var(--rem); flex: ${item.stages.rem}"></span>
+            <span style="--stage-color: var(--light); flex: ${item.stages.light}"></span>
+          </span>
+          <span class="bar-tooltip" aria-hidden="true">${item.day}<br>${durationOf(item.total)} · 深睡 ${durationOf(item.stages.deep)}</span>
+        `;
+        weekBars.appendChild(button);
+      });
+
+      const themeToggle = document.getElementById("theme-toggle");
+      const themeIcon = document.getElementById("theme-icon");
+      const root = document.documentElement;
+      const metaTheme = document.querySelector('meta[name="theme-color"]');
+      const applyTheme = (theme) => {
+        root.dataset.theme = theme;
+        const dark = theme === "dark";
+        themeToggle.setAttribute("aria-label", dark ? "切换到浅色模式" : "切换到深色模式");
+        metaTheme.setAttribute("content", dark ? "#0c1322" : "#edf0f8");
+        themeIcon.innerHTML = dark
+          ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'
+          : '<path d="M20.5 14.1A8.2 8.2 0 0 1 9.9 3.5 8.3 8.3 0 1 0 20.5 14.1Z"/>';
+      };
+
+      let savedTheme = null;
+      try {
+        savedTheme = localStorage.getItem("vitaloop-sleep-theme");
+      } catch (_) {}
+      const queryTheme = new URLSearchParams(window.location.search).get("theme");
+      applyTheme(queryTheme === "dark" || queryTheme === "light" ? queryTheme : savedTheme === "dark" ? "dark" : "light");
+      themeToggle.addEventListener("click", () => {
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        applyTheme(next);
+        try {
+          localStorage.setItem("vitaloop-sleep-theme", next);
+        } catch (_) {}
+      });
+    })();
+  </script>
+</body>
+</html>

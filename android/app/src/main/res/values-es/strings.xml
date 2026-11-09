@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">Reenvío de notificaciones de Vitaloop</string>
+    <string name="watch_sync_channel_name">Sincronización del reloj</string>
+    <string name="watch_sync_channel_description">Mantiene el reloj conectado y sincroniza datos de salud en segundo plano</string>
+    <string name="watch_sync_connecting">Manteniendo la conexión con el reloj</string>
+    <string name="watch_sync_connected">Conectado · sincronizando datos de salud</string>
+    <string name="watch_sync_connecting_device">Conectando con el reloj…</string>
+    <string name="watch_sync_authenticating">Autenticando el reloj…</string>
+    <string name="watch_sync_configuring">Sincronizando ajustes del reloj…</string>
+    <string name="watch_sync_failed">No se pudo conectar; se reintentará más tarde</string>
+    <string name="watch_sync_waiting">Reloj desconectado; esperando para reintentar</string>
+    <string name="watch_sync_notification_title">Vitaloop · Sincronización de salud</string>
+    <string name="gps_live_channel_name">Compartir ruta en directo</string>
+    <string name="gps_live_channel_description">Comparte la ruta GPS con tu servicio autoalojado durante el ejercicio</string>
+    <string name="gps_live_title">Compartir ruta</string>
+    <string name="gps_live_waiting">Esperando para iniciar</string>
+    <string name="gps_live_no_service">No se ha configurado la dirección del servicio</string>
+    <string name="gps_live_fill_service">Introduce la dirección en la página de compartir ruta en directo</string>
+    <string name="gps_live_location_failed">Error de ubicación</string>
+    <string name="gps_live_check_location">Comprueba el permiso de ubicación y el GPS del sistema</string>
+    <string name="gps_live_locating">Obteniendo ubicación</string>
+    <string name="gps_live_getting_route">Obteniendo ruta GPS</string>
+    <string name="gps_live_paused">En pausa</string>
+    <string name="gps_live_paused_body">Ubicación detenida; las subidas continuarán al reanudar</string>
+    <string name="gps_live_sharing">Compartiendo</string>
+    <string name="gps_live_resumed">Subida de ruta reanudada</string>
+    <string name="gps_live_restore_failed">No se pudo reanudar la ubicación; comprueba el permiso</string>
+    <string name="gps_live_mic_enabled">Micrófono activado para voz en directo</string>
+    <string name="gps_live_upload_failed">Error de subida</string>
+    <string name="gps_live_heart_rate">Frecuencia cardíaca</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>

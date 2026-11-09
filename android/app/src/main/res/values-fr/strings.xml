@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">Transfert des notifications Vitaloop</string>
+    <string name="watch_sync_channel_name">Synchro de la montre</string>
+    <string name="watch_sync_channel_description">Maintient la montre connectée et synchronise les données de santé en arrière-plan</string>
+    <string name="watch_sync_connecting">Maintien de la connexion à la montre</string>
+    <string name="watch_sync_connected">Connectée · synchronisation des données</string>
+    <string name="watch_sync_connecting_device">Connexion à la montre…</string>
+    <string name="watch_sync_authenticating">Authentification de la montre…</string>
+    <string name="watch_sync_configuring">Synchronisation des réglages…</string>
+    <string name="watch_sync_failed">Connexion échouée ; nouvelle tentative plus tard</string>
+    <string name="watch_sync_waiting">Montre déconnectée ; nouvelle tentative en attente</string>
+    <string name="watch_sync_notification_title">Vitaloop · Synchro des données</string>
+    <string name="gps_live_channel_name">Partage d’itinéraire</string>
+    <string name="gps_live_channel_description">Partage l’itinéraire GPS avec votre service auto-hébergé pendant l’effort</string>
+    <string name="gps_live_title">Partage d’itinéraire</string>
+    <string name="gps_live_waiting">En attente de démarrage</string>
+    <string name="gps_live_no_service">L’adresse du service n’est pas configurée</string>
+    <string name="gps_live_fill_service">Saisissez l’adresse du service sur la page de partage d’itinéraire</string>
+    <string name="gps_live_location_failed">Échec de la localisation</string>
+    <string name="gps_live_check_location">Vérifiez l’autorisation de localisation et le GPS</string>
+    <string name="gps_live_locating">Localisation en cours</string>
+    <string name="gps_live_getting_route">Obtention de l’itinéraire GPS</string>
+    <string name="gps_live_paused">En pause</string>
+    <string name="gps_live_paused_body">Localisation arrêtée ; l’envoi reprendra après réactivation</string>
+    <string name="gps_live_sharing">Partage actif</string>
+    <string name="gps_live_resumed">Envoi de l’itinéraire repris</string>
+    <string name="gps_live_restore_failed">Impossible de reprendre la localisation ; vérifiez l’autorisation</string>
+    <string name="gps_live_mic_enabled">Micro activé pour la voix en direct</string>
+    <string name="gps_live_upload_failed">Échec de l’envoi</string>
+    <string name="gps_live_heart_rate">Fréquence cardiaque</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>

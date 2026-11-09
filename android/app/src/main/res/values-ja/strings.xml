@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">Vitaloop 通知転送</string>
+    <string name="watch_sync_channel_name">ウォッチデータ同期</string>
+    <string name="watch_sync_channel_description">バックグラウンドでウォッチ接続を維持し、健康データを同期します</string>
+    <string name="watch_sync_connecting">ウォッチ接続を維持しています</string>
+    <string name="watch_sync_connected">接続済み · 健康データを同期中</string>
+    <string name="watch_sync_connecting_device">ウォッチに接続中…</string>
+    <string name="watch_sync_authenticating">ウォッチを認証中…</string>
+    <string name="watch_sync_configuring">ウォッチ設定を同期中…</string>
+    <string name="watch_sync_failed">接続に失敗しました。後で再試行します</string>
+    <string name="watch_sync_waiting">ウォッチ未接続。再試行を待っています</string>
+    <string name="watch_sync_notification_title">Vitaloop · 健康データ同期</string>
+    <string name="gps_live_channel_name">ライブルート共有</string>
+    <string name="gps_live_channel_description">運動中に GPS ルートをセルフホストサービスへ共有します</string>
+    <string name="gps_live_title">ルート共有</string>
+    <string name="gps_live_waiting">開始待ち</string>
+    <string name="gps_live_no_service">共有サービスのアドレスが未設定です</string>
+    <string name="gps_live_fill_service">ライブルート共有ページでサービスアドレスを入力してください</string>
+    <string name="gps_live_location_failed">位置情報の取得に失敗しました</string>
+    <string name="gps_live_check_location">位置情報の権限とシステム GPS を確認してください</string>
+    <string name="gps_live_locating">位置情報を取得中</string>
+    <string name="gps_live_getting_route">GPS ルートを取得中</string>
+    <string name="gps_live_paused">一時停止中</string>
+    <string name="gps_live_paused_body">位置情報を停止しました。再開後にアップロードします</string>
+    <string name="gps_live_sharing">共有中</string>
+    <string name="gps_live_resumed">ルートのアップロードを再開しました</string>
+    <string name="gps_live_restore_failed">位置情報を再開できません。権限を確認してください</string>
+    <string name="gps_live_mic_enabled">マイクを有効にしました。ライブ音声を開始できます</string>
+    <string name="gps_live_upload_failed">アップロードに失敗しました</string>
+    <string name="gps_live_heart_rate">心拍数</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>

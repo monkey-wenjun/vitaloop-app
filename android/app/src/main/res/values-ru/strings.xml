@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">Пересылка уведомлений Vitaloop</string>
+    <string name="watch_sync_channel_name">Синхронизация часов</string>
+    <string name="watch_sync_channel_description">Поддерживает подключение часов и синхронизирует данные о здоровье в фоне</string>
+    <string name="watch_sync_connecting">Поддержание подключения к часам</string>
+    <string name="watch_sync_connected">Подключено · синхронизация данных о здоровье</string>
+    <string name="watch_sync_connecting_device">Подключение к часам…</string>
+    <string name="watch_sync_authenticating">Аутентификация часов…</string>
+    <string name="watch_sync_configuring">Синхронизация настроек часов…</string>
+    <string name="watch_sync_failed">Не удалось подключиться; повтор позже</string>
+    <string name="watch_sync_waiting">Часы не подключены; ожидание повтора</string>
+    <string name="watch_sync_notification_title">Vitaloop · Синхронизация данных</string>
+    <string name="gps_live_channel_name">Общий маршрут</string>
+    <string name="gps_live_channel_description">Передаёт GPS-маршрут на ваш собственный сервер во время тренировки</string>
+    <string name="gps_live_title">Общий маршрут</string>
+    <string name="gps_live_waiting">Ожидание запуска</string>
+    <string name="gps_live_no_service">Адрес сервера не настроен</string>
+    <string name="gps_live_fill_service">Укажите адрес сервера на странице общего маршрута</string>
+    <string name="gps_live_location_failed">Ошибка геолокации</string>
+    <string name="gps_live_check_location">Проверьте разрешение на геолокацию и GPS</string>
+    <string name="gps_live_locating">Определение местоположения</string>
+    <string name="gps_live_getting_route">Получение GPS-маршрута</string>
+    <string name="gps_live_paused">Пауза</string>
+    <string name="gps_live_paused_body">Геолокация остановлена; отправка продолжится после возобновления</string>
+    <string name="gps_live_sharing">Общий доступ</string>
+    <string name="gps_live_resumed">Отправка маршрута возобновлена</string>
+    <string name="gps_live_restore_failed">Не удалось возобновить геолокацию; проверьте разрешение</string>
+    <string name="gps_live_mic_enabled">Микрофон включён для голосовой передачи</string>
+    <string name="gps_live_upload_failed">Ошибка отправки</string>
+    <string name="gps_live_heart_rate">Пульс</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>

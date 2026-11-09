@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">Chuyển tiếp thông báo Vitaloop</string>
+    <string name="watch_sync_channel_name">Đồng bộ dữ liệu đồng hồ</string>
+    <string name="watch_sync_channel_description">Giữ kết nối đồng hồ và đồng bộ dữ liệu sức khỏe trong nền</string>
+    <string name="watch_sync_connecting">Đang duy trì kết nối đồng hồ</string>
+    <string name="watch_sync_connected">Đã kết nối · đang đồng bộ dữ liệu sức khỏe</string>
+    <string name="watch_sync_connecting_device">Đang kết nối đồng hồ…</string>
+    <string name="watch_sync_authenticating">Đang xác thực đồng hồ…</string>
+    <string name="watch_sync_configuring">Đang đồng bộ cài đặt đồng hồ…</string>
+    <string name="watch_sync_failed">Kết nối thất bại; sẽ thử lại sau</string>
+    <string name="watch_sync_waiting">Đồng hồ chưa kết nối; đang chờ thử lại</string>
+    <string name="watch_sync_notification_title">Vitaloop · Đồng bộ dữ liệu</string>
+    <string name="gps_live_channel_name">Chia sẻ lộ trình trực tiếp</string>
+    <string name="gps_live_channel_description">Chia sẻ lộ trình GPS đến dịch vụ tự lưu trữ trong khi tập</string>
+    <string name="gps_live_title">Chia sẻ lộ trình</string>
+    <string name="gps_live_waiting">Đang chờ bắt đầu</string>
+    <string name="gps_live_no_service">Chưa cấu hình địa chỉ dịch vụ chia sẻ</string>
+    <string name="gps_live_fill_service">Nhập địa chỉ dịch vụ trên trang chia sẻ lộ trình trực tiếp</string>
+    <string name="gps_live_location_failed">Định vị thất bại</string>
+    <string name="gps_live_check_location">Kiểm tra quyền vị trí và GPS hệ thống</string>
+    <string name="gps_live_locating">Đang định vị</string>
+    <string name="gps_live_getting_route">Đang lấy lộ trình GPS</string>
+    <string name="gps_live_paused">Đã tạm dừng</string>
+    <string name="gps_live_paused_body">Đã dừng định vị; quá trình tải lên sẽ tiếp tục khi khôi phục</string>
+    <string name="gps_live_sharing">Đang chia sẻ</string>
+    <string name="gps_live_resumed">Đã tiếp tục tải lộ trình lên</string>
+    <string name="gps_live_restore_failed">Không thể khôi phục định vị; hãy kiểm tra quyền</string>
+    <string name="gps_live_mic_enabled">Đã bật micrô cho giọng nói trực tiếp</string>
+    <string name="gps_live_upload_failed">Tải lên thất bại</string>
+    <string name="gps_live_heart_rate">Nhịp tim</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>

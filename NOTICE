@@ -1,0 +1,45 @@
+元环 Vitaloop
+Copyright (C) 2026 Awen and contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------------
+第三方作品与致谢 / Third-party notices
+
+1. Gadgetbridge
+   Copyright (C) 2015-2026 Gadgetbridge contributors
+   https://codeberg.org/Freeyourgadget/Gadgetbridge
+   Licensed under the GNU Affero General Public License v3.0.
+
+   本项目包含从 Gadgetbridge 复制或改写的 Java 协议、数据模型与华为设备
+   实现，均保留上游版权并以 AGPL-3.0 分发。具体第三方清单见
+   THIRD_PARTY_NOTICES.md。
+
+2. Flutter / Dart
+   Copyright (C) Google LLC and the Dart project authors.
+   BSD-3-Clause. https://flutter.dev
+
+3. flutter_rust_bridge
+   Copyright (C) 2021-2026 flutter_rust_bridge contributors.
+   MIT / Apache-2.0. https://cjycode.com/flutter_rust_bridge/
+
+4. Rusqlite / SQLite
+   rusqlite: MIT. https://github.com/rusqlite/rusqlite
+   SQLite: Public Domain. https://sqlite.org
+
+5. chrono / serde / anyhow
+   MIT / Apache-2.0. 详见 crates.io 对应项目。
+
+6. 字体与图标
+   界面使用系统字体与 Material Icons（Apache-2.0），未内嵌第三方商业字体。

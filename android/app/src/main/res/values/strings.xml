@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">Vitaloop notification forwarding</string>
+    <string name="watch_sync_channel_name">Watch data sync</string>
+    <string name="watch_sync_channel_description">Keep the watch connected and sync health data in the background</string>
+    <string name="watch_sync_connecting">Maintaining watch connection</string>
+    <string name="watch_sync_connected">Connected · syncing health data</string>
+    <string name="watch_sync_connecting_device">Connecting to watch…</string>
+    <string name="watch_sync_authenticating">Authenticating watch…</string>
+    <string name="watch_sync_configuring">Syncing watch settings…</string>
+    <string name="watch_sync_failed">Connection failed; retrying later</string>
+    <string name="watch_sync_waiting">Watch not connected; waiting to retry</string>
+    <string name="watch_sync_notification_title">Vitaloop · Health data sync</string>
+    <string name="gps_live_channel_name">Live route sharing</string>
+    <string name="gps_live_channel_description">Share a GPS route to your self-hosted service during workouts</string>
+    <string name="gps_live_title">Route sharing</string>
+    <string name="gps_live_waiting">Waiting to start</string>
+    <string name="gps_live_no_service">Share service address is not configured</string>
+    <string name="gps_live_fill_service">Fill in the service address on the live route sharing page</string>
+    <string name="gps_live_location_failed">Location failed</string>
+    <string name="gps_live_check_location">Check location permission and system GPS</string>
+    <string name="gps_live_locating">Locating</string>
+    <string name="gps_live_getting_route">Getting GPS route</string>
+    <string name="gps_live_paused">Paused</string>
+    <string name="gps_live_paused_body">Location stopped; uploads resume when restored</string>
+    <string name="gps_live_sharing">Sharing</string>
+    <string name="gps_live_resumed">Route uploads resumed</string>
+    <string name="gps_live_restore_failed">Could not restore location; check permission</string>
+    <string name="gps_live_mic_enabled">Microphone enabled for live voice</string>
+    <string name="gps_live_upload_failed">Upload failed</string>
+    <string name="gps_live_heart_rate">Heart rate</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>

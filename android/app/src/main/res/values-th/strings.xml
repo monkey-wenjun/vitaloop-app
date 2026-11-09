@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">การส่งต่อการแจ้งเตือน Vitaloop</string>
+    <string name="watch_sync_channel_name">ซิงค์ข้อมูลนาฬิกา</string>
+    <string name="watch_sync_channel_description">รักษาการเชื่อมต่อนาฬิกาและซิงค์ข้อมูลสุขภาพเบื้องหลัง</string>
+    <string name="watch_sync_connecting">กำลังรักษาการเชื่อมต่อนาฬิกา</string>
+    <string name="watch_sync_connected">เชื่อมต่อแล้ว · กำลังซิงค์ข้อมูลสุขภาพ</string>
+    <string name="watch_sync_connecting_device">กำลังเชื่อมต่อนาฬิกา…</string>
+    <string name="watch_sync_authenticating">กำลังยืนยันตัวตนนาฬิกา…</string>
+    <string name="watch_sync_configuring">กำลังซิงค์การตั้งค่านาฬิกา…</string>
+    <string name="watch_sync_failed">เชื่อมต่อไม่สำเร็จ จะลองใหม่ภายหลัง</string>
+    <string name="watch_sync_waiting">นาฬิกาไม่ได้เชื่อมต่อ กำลังรอลองใหม่</string>
+    <string name="watch_sync_notification_title">Vitaloop · ซิงค์ข้อมูลสุขภาพ</string>
+    <string name="gps_live_channel_name">แชร์เส้นทางสด</string>
+    <string name="gps_live_channel_description">แชร์เส้นทาง GPS ไปยังบริการที่ติดตั้งเองระหว่างออกกำลังกาย</string>
+    <string name="gps_live_title">แชร์เส้นทาง</string>
+    <string name="gps_live_waiting">รอเริ่มต้น</string>
+    <string name="gps_live_no_service">ยังไม่ได้ตั้งค่าที่อยู่บริการแชร์</string>
+    <string name="gps_live_fill_service">กรอกที่อยู่บริการในหน้าแชร์เส้นทางสด</string>
+    <string name="gps_live_location_failed">ระบุตำแหน่งไม่สำเร็จ</string>
+    <string name="gps_live_check_location">ตรวจสอบสิทธิ์ตำแหน่งและ GPS ของระบบ</string>
+    <string name="gps_live_locating">กำลังระบุตำแหน่ง</string>
+    <string name="gps_live_getting_route">กำลังรับเส้นทาง GPS</string>
+    <string name="gps_live_paused">หยุดชั่วคราว</string>
+    <string name="gps_live_paused_body">หยุดระบุตำแหน่งแล้ว จะอัปโหลดต่อเมื่อกลับมาใช้งาน</string>
+    <string name="gps_live_sharing">กำลังแชร์</string>
+    <string name="gps_live_resumed">กลับมาอัปโหลดเส้นทางแล้ว</string>
+    <string name="gps_live_restore_failed">ไม่สามารถกลับมาระบุตำแหน่งได้ ตรวจสอบสิทธิ์</string>
+    <string name="gps_live_mic_enabled">เปิดไมโครโฟนสำหรับเสียงสดแล้ว</string>
+    <string name="gps_live_upload_failed">อัปโหลดไม่สำเร็จ</string>
+    <string name="gps_live_heart_rate">อัตราการเต้นของหัวใจ</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>

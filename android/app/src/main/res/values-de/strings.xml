@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vitaloop</string>
+    <string name="notification_forwarder_label">Vitaloop-Benachrichtigungsweiterleitung</string>
+    <string name="watch_sync_channel_name">Uhrdatensynchronisierung</string>
+    <string name="watch_sync_channel_description">Hält die Uhr verbunden und synchronisiert Gesundheitsdaten im Hintergrund</string>
+    <string name="watch_sync_connecting">Uhrverbindung wird aufrechterhalten</string>
+    <string name="watch_sync_connected">Verbunden · Gesundheitsdaten werden synchronisiert</string>
+    <string name="watch_sync_connecting_device">Verbindung zur Uhr wird hergestellt…</string>
+    <string name="watch_sync_authenticating">Uhr wird authentifiziert…</string>
+    <string name="watch_sync_configuring">Uhr-Einstellungen werden synchronisiert…</string>
+    <string name="watch_sync_failed">Verbindung fehlgeschlagen; späterer neuer Versuch</string>
+    <string name="watch_sync_waiting">Uhr nicht verbunden; neuer Versuch ausstehend</string>
+    <string name="watch_sync_notification_title">Vitaloop · Gesundheitsdaten</string>
+    <string name="gps_live_channel_name">Live-Routenfreigabe</string>
+    <string name="gps_live_channel_description">Teilt die GPS-Route während des Trainings mit deinem selbst gehosteten Dienst</string>
+    <string name="gps_live_title">Routenfreigabe</string>
+    <string name="gps_live_waiting">Warten auf Start</string>
+    <string name="gps_live_no_service">Adresse des Freigabedienstes ist nicht konfiguriert</string>
+    <string name="gps_live_fill_service">Adresse auf der Seite für Live-Routenfreigabe eingeben</string>
+    <string name="gps_live_location_failed">Standortbestimmung fehlgeschlagen</string>
+    <string name="gps_live_check_location">Standortberechtigung und System-GPS prüfen</string>
+    <string name="gps_live_locating">Standort wird bestimmt</string>
+    <string name="gps_live_getting_route">GPS-Route wird abgerufen</string>
+    <string name="gps_live_paused">Pausiert</string>
+    <string name="gps_live_paused_body">Standort gestoppt; Uploads werden nach Fortsetzung wieder aufgenommen</string>
+    <string name="gps_live_sharing">Freigabe aktiv</string>
+    <string name="gps_live_resumed">Routen-Upload wieder aufgenommen</string>
+    <string name="gps_live_restore_failed">Standort konnte nicht fortgesetzt werden; Berechtigung prüfen</string>
+    <string name="gps_live_mic_enabled">Mikrofon für Live-Sprache aktiviert</string>
+    <string name="gps_live_upload_failed">Upload fehlgeschlagen</string>
+    <string name="gps_live_heart_rate">Herzfrequenz</string>
+    <string name="gps_live_notification_title">Vitaloop · %1$s</string>
+</resources>
