@@ -234,12 +234,31 @@ pub fn ingest_watch_data(events_json: String) -> Result<String> {
                             .and_then(|v| v.as_i64())
                             .filter(|v| *v > 0);
                         let wake = ev.get("wake").and_then(|v| v.as_i64()).filter(|v| *v > 0);
+                        let duration_min = ev
+                            .get("duration_min")
+                            .and_then(|v| v.as_i64())
+                            .filter(|v| *v > 0);
+                        let watch_score = ev
+                            .get("score")
+                            .and_then(|v| v.as_i64())
+                            .filter(|v| (1..=100).contains(v));
+                        let watch_efficiency = ev
+                            .get("efficiency")
+                            .and_then(|v| v.as_i64())
+                            .filter(|v| (1..=100).contains(v));
+                        let watch_wake_count = ev
+                            .get("wake_count")
+                            .and_then(|v| v.as_i64())
+                            .filter(|v| *v >= 0);
                         if session_start > 0
                             && (bed.is_some() || fall_asleep.is_some() || wake.is_some())
                         {
                             tx.execute(
-                                "INSERT INTO sleep_bed(session_start_ms, bed_ms, fall_asleep_ms, wake_ms)
-                                 VALUES(?1, ?2, ?3, ?4)
+                                "INSERT INTO sleep_bed(
+                                    session_start_ms, bed_ms, fall_asleep_ms, wake_ms,
+                                    duration_min, watch_score, watch_efficiency, watch_wake_count
+                                 )
+                                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                                  ON CONFLICT(session_start_ms) DO UPDATE SET
                                     bed_ms = CASE
                                         WHEN excluded.bed_ms IS NULL THEN sleep_bed.bed_ms
@@ -252,8 +271,21 @@ pub fn ingest_watch_data(events_json: String) -> Result<String> {
                                     wake_ms = CASE
                                         WHEN excluded.wake_ms IS NULL THEN sleep_bed.wake_ms
                                         WHEN sleep_bed.wake_ms IS NULL OR excluded.wake_ms > sleep_bed.wake_ms THEN excluded.wake_ms
-                                        ELSE sleep_bed.wake_ms END",
-                                params![session_start, bed, fall_asleep, wake],
+                                        ELSE sleep_bed.wake_ms END,
+                                    duration_min = COALESCE(excluded.duration_min, sleep_bed.duration_min),
+                                    watch_score = COALESCE(excluded.watch_score, sleep_bed.watch_score),
+                                    watch_efficiency = COALESCE(excluded.watch_efficiency, sleep_bed.watch_efficiency),
+                                    watch_wake_count = COALESCE(excluded.watch_wake_count, sleep_bed.watch_wake_count)",
+                                params![
+                                    session_start,
+                                    bed,
+                                    fall_asleep,
+                                    wake,
+                                    duration_min,
+                                    watch_score,
+                                    watch_efficiency,
+                                    watch_wake_count
+                                ],
                             )?;
                             counts[4] += 1;
                             touched_days.insert(local_day(session_start));
@@ -1177,10 +1209,8 @@ pub(crate) fn rebuild_sleep_sessions(conn: &Connection) -> Result<()> {
     // 手表每分钟都会重发整段睡眠分期。先和现有会话逐字段比一遍，
     // 只写真正变化的行；否则每次同步都会 DELETE+INSERT 上百行，
     // 既放大 SQLite 写入，也会让云端增量里全是重复数据。
-    let mut existing: std::collections::HashMap<
-        (i64, String),
-        (i64, f64, f64, f64, f64),
-    > = std::collections::HashMap::new();
+    let mut existing: std::collections::HashMap<(i64, String), (i64, f64, f64, f64, f64)> =
+        std::collections::HashMap::new();
     {
         let mut stmt = conn.prepare(
             "SELECT start_ms, source, end_ms, deep_min, light_min, rem_min, awake_min
@@ -1226,15 +1256,28 @@ pub(crate) fn rebuild_sleep_sessions(conn: &Connection) -> Result<()> {
             continue;
         }
         conn.execute(
-            "INSERT INTO sleep_sessions(start_ms, end_ms, deep_min, light_min, rem_min, awake_min, source)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6, 'watch')
+            "INSERT INTO sleep_sessions(
+                start_ms, end_ms, deep_min, light_min, rem_min, awake_min, anchor_min, source
+             )
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, 'watch')
              ON CONFLICT(start_ms, source) DO UPDATE SET
                 end_ms = excluded.end_ms,
                 deep_min = excluded.deep_min,
                 light_min = excluded.light_min,
                 rem_min = excluded.rem_min,
-                awake_min = excluded.awake_min",
-            params![s.start, s.end, s.deep as f64, s.light as f64, s.rem as f64, s.awake as f64],
+                awake_min = excluded.awake_min,
+                anchor_min = CASE
+                    WHEN excluded.anchor_min > 0 THEN excluded.anchor_min
+                    ELSE sleep_sessions.anchor_min END",
+            params![
+                s.start,
+                s.end,
+                s.deep as f64,
+                s.light as f64,
+                s.rem as f64,
+                s.awake as f64,
+                (s.sleep > 0).then_some(s.sleep)
+            ],
         )?;
         existing.remove(&(s.start, "watch".to_string()));
     }
@@ -1621,7 +1664,11 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        assert_eq!(read_steps(), 9712, "全量日汇总应作为权威步数入库，不被采样 SUM 拉低");
+        assert_eq!(
+            read_steps(),
+            9712,
+            "全量日汇总应作为权威步数入库，不被采样 SUM 拉低"
+        );
 
         // 第二轮：只有采样重新聚合（SUM 偏小），不得把权威值拉低
         ingest_watch_data(
@@ -2288,8 +2335,7 @@ mod tests {
             assert!(
                 sessions
                     .iter()
-                    .any(|(start, minutes)| *start == at(13, 0)
-                        && (*minutes - 36.0).abs() < 1.0),
+                    .any(|(start, minutes)| *start == at(13, 0) && (*minutes - 36.0).abs() < 1.0),
                 "碎片化午睡没有从白天噪声里恢复: {sessions:?}"
             );
             assert!(
@@ -2351,15 +2397,13 @@ mod tests {
             assert!(
                 sessions
                     .iter()
-                    .any(|(start, minutes)| *start == at(12, 38)
-                        && (*minutes - 60.0).abs() < 1.0),
+                    .any(|(start, minutes)| *start == at(12, 38) && (*minutes - 60.0).abs() < 1.0),
                 "锚点前的午睡被吞掉了: {sessions:?}"
             );
             assert!(
                 sessions
                     .iter()
-                    .any(|(start, minutes)| *start == at(13, 46)
-                        && (*minutes - 13.0).abs() < 1.0),
+                    .any(|(start, minutes)| *start == at(13, 46) && (*minutes - 13.0).abs() < 1.0),
                 "锚点本身仍应保留: {sessions:?}"
             );
             Ok(())

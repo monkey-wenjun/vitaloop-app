@@ -10,7 +10,7 @@ use crate::readiness;
 
 static DB: OnceLock<Mutex<Option<Connection>>> = OnceLock::new();
 
-pub const DB_VERSION: i64 = 10;
+pub const DB_VERSION: i64 = 11;
 
 fn cell() -> &'static Mutex<Option<Connection>> {
     DB.get_or_init(|| Mutex::new(None))
@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS sleep_sessions(
   light_min REAL NOT NULL DEFAULT 0,
   rem_min REAL NOT NULL DEFAULT 0,
   awake_min REAL NOT NULL DEFAULT 0,
+  anchor_min INTEGER,
   source TEXT NOT NULL DEFAULT 'watch'
 );
 
@@ -546,6 +547,7 @@ CREATE TABLE IF NOT EXISTS sync_changelog(
         ("sleep_bed", "watch_score", "INTEGER"),
         ("sleep_bed", "watch_efficiency", "INTEGER"),
         ("sleep_bed", "watch_wake_count", "INTEGER"),
+        ("sleep_sessions", "anchor_min", "INTEGER"),
     ] {
         add_column_if_missing(conn, table, column, decl)?;
     }
@@ -658,6 +660,11 @@ CREATE TABLE IF NOT EXISTS sync_changelog(
             [],
         )?;
         recompute_sleep_daily_metrics(conn)?;
+    }
+    if previous_version < 11 {
+        // v11 保存手表 TruSleep 的整段睡眠锚点。用它作为最终总时长，
+        // 避免分钟分期四舍五入造成 6h18 在 App 里变成 6h20。
+        crate::watch::rebuild_sleep_sessions(conn)?;
     }
     backfill_sleep_stage_minutes(conn)?;
     // 旧版 maxMET 是 1e5 定点（899398 = 8.99）。早期导入把原值直接落库，
@@ -1511,6 +1518,7 @@ struct SleepSessionRow {
     light: f64,
     rem: f64,
     awake: f64,
+    anchor_min: Option<f64>,
 }
 
 impl SleepSessionRow {
@@ -1535,7 +1543,7 @@ impl SleepSessionRow {
 /// 两场都算今天的睡眠。
 fn sleep_sessions_ending_on(conn: &Connection, day: i64) -> Result<Vec<SleepSessionRow>> {
     let mut stmt = conn.prepare(
-        "SELECT start_ms, end_ms, deep_min, light_min, rem_min, awake_min
+        "SELECT start_ms, end_ms, deep_min, light_min, rem_min, awake_min, anchor_min
          FROM sleep_sessions WHERE end_ms >= ?1 AND end_ms < ?2 ORDER BY start_ms",
     )?;
     let rows = stmt.query_map(params![day_start_ms(day), day_end_ms(day)], |r| {
@@ -1546,6 +1554,7 @@ fn sleep_sessions_ending_on(conn: &Connection, day: i64) -> Result<Vec<SleepSess
             light: r.get(3)?,
             rem: r.get(4)?,
             awake: r.get(5)?,
+            anchor_min: r.get(6)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -1576,7 +1585,7 @@ pub(crate) fn dedupe_sleep_session_rows(conn: &Connection) -> Result<()> {
     let mut rows = Vec::new();
     {
         let mut stmt = conn.prepare(
-            "SELECT id, start_ms, end_ms, deep_min, light_min, rem_min, awake_min
+            "SELECT id, start_ms, end_ms, deep_min, light_min, rem_min, awake_min, anchor_min
              FROM sleep_sessions ORDER BY start_ms, end_ms DESC, id",
         )?;
         let iter = stmt.query_map([], |r| {
@@ -1589,6 +1598,7 @@ pub(crate) fn dedupe_sleep_session_rows(conn: &Connection) -> Result<()> {
                     light: r.get(4)?,
                     rem: r.get(5)?,
                     awake: r.get(6)?,
+                    anchor_min: r.get(7)?,
                 },
             ))
         })?;
@@ -1708,13 +1718,33 @@ fn sleep_summary_for(conn: &Connection, day: i64) -> Result<Option<SleepSummary>
     }
     let deep = sessions.iter().map(|s| s.deep).sum::<f64>();
     let mut light = sessions.iter().map(|s| s.light).sum::<f64>();
-    let rem = sessions.iter().map(|s| s.rem).sum::<f64>();
+    let mut rem = sessions.iter().map(|s| s.rem).sum::<f64>();
     let awake = sessions.iter().map(|s| s.awake).sum::<f64>();
+    let detailed_asleep = deep + light + rem;
+    let anchor_asleep = sessions
+        .iter()
+        .filter_map(|session| session.anchor_min)
+        .sum::<f64>();
     let main_asleep = sessions
         .iter()
-        .map(SleepSessionRow::asleep)
+        .map(|session| session.anchor_min.unwrap_or_else(|| session.asleep()))
         .fold(0.0, f64::max);
-    let mut asleep = deep + light + rem;
+    let mut asleep = if anchor_asleep > 0.0 {
+        anchor_asleep
+    } else {
+        detailed_asleep
+    };
+    if anchor_asleep > detailed_asleep {
+        light += anchor_asleep - detailed_asleep;
+    } else if anchor_asleep > 0.0 && detailed_asleep > anchor_asleep {
+        let mut reduce = detailed_asleep - anchor_asleep;
+        let from_light = light.min(reduce);
+        light -= from_light;
+        reduce -= from_light;
+        if reduce > 0.0 {
+            rem = (rem - reduce).max(0.0);
+        }
+    }
     let mut total = asleep + awake;
     let mut efficiency = if total > 0.0 {
         (asleep / total * 100.0).round() as i64
@@ -1736,21 +1766,23 @@ fn sleep_summary_for(conn: &Connection, day: i64) -> Result<Option<SleepSummary>
     // 睡眠时长和官方评分是最终口径；缺的分期时长先补到浅睡，避免首页
     // 把 6h18 截成 4h44，再用自定义公式算出一个很低的伪分数。
     if let Some(correction) = watch_sleep_correction(conn, &main)? {
-        if let Some(minutes) = correction.duration_min.filter(|v| *v > 0) {
-            let tracked = asleep.round() as i64;
-            let watch_asleep = (minutes as f64 - awake).max(0.0).round() as i64;
-            if watch_asleep > tracked {
-                let missing = (watch_asleep - tracked) as f64;
-                light += missing;
-                asleep += missing;
-                total = asleep + awake;
-                efficiency = if total > 0.0 {
-                    (asleep / total * 100.0).round() as i64
-                } else {
-                    0
-                };
+        if anchor_asleep <= 0.0 {
+            if let Some(minutes) = correction.duration_min.filter(|v| *v > 0) {
+                let tracked = asleep.round() as i64;
+                let watch_asleep = (minutes as f64 - awake).max(0.0).round() as i64;
+                if watch_asleep > tracked {
+                    let missing = (watch_asleep - tracked) as f64;
+                    light += missing;
+                    asleep += missing;
+                    total = asleep + awake;
+                    efficiency = if total > 0.0 {
+                        (asleep / total * 100.0).round() as i64
+                    } else {
+                        0
+                    };
+                }
+                summary_end = summary_end.max(summary_start + minutes * 60_000);
             }
-            summary_end = summary_end.max(summary_start + minutes * 60_000);
         }
         if let Some(wake) = correction.wake_ms.filter(|v| *v > summary_start) {
             summary_end = summary_end.max(wake);
@@ -1793,7 +1825,7 @@ pub(crate) fn recompute_sleep_daily_metrics(conn: &Connection) -> Result<()> {
         std::collections::BTreeMap::new();
     {
         let mut stmt = conn.prepare(
-            "SELECT start_ms, end_ms, deep_min, light_min, rem_min, awake_min
+            "SELECT start_ms, end_ms, deep_min, light_min, rem_min, awake_min, anchor_min
              FROM sleep_sessions",
         )?;
         let rows = stmt.query_map([], |r| {
@@ -1804,6 +1836,7 @@ pub(crate) fn recompute_sleep_daily_metrics(conn: &Connection) -> Result<()> {
                 light: r.get(3)?,
                 rem: r.get(4)?,
                 awake: r.get(5)?,
+                anchor_min: r.get(6)?,
             })
         })?;
         for row in rows {
@@ -4730,6 +4763,7 @@ mod tests {
             light: 28.0,
             rem: 0.0,
             awake: 8.0,
+            anchor_min: None,
         };
         assert!(!false_nap.valid());
 
@@ -4740,6 +4774,7 @@ mod tests {
             light: 264.0,
             rem: 122.0,
             awake: 41.0,
+            anchor_min: None,
         };
         assert!(real_night.valid());
     }
