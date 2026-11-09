@@ -31,8 +31,7 @@ class MapDisplaySettings extends ChangeNotifier {
   bool _loaded = false;
   bool _defaultsLoaded = false;
 
-  static const defaultPmtilesUrl =
-      'https://build.protomaps.com/20261109.pmtiles';
+  static const defaultPmtilesUrl = 'https://sync.example.com';
 
   Future<void> load() async {
     if (_loaded) return;

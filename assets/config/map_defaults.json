@@ -1,4 +1,4 @@
 {
-  "tileServerUrl": "https://build.protomaps.com/20261109.pmtiles",
-  "offlineCityEnabled": false
+  "tileServerUrl": "https://sync.example.com",
+  "offlineCityEnabled": true
 }
