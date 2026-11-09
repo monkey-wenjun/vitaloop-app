@@ -32,10 +32,11 @@ user. The project maintainer does not operate a default public service in the
 public build. A self-hosted operator is responsible for authentication, encryption
 in transit, retention, deletion, backups, and access control.
 
-Map tiles, geocoding, road routing, weather, and similar requests are made only
-when the corresponding screen or function is used. These requests contain the
-coordinates or query needed for the feature and are subject to the selected
-provider's terms and privacy policy.
+The public default basemap is MapLibre with Protomaps PMTiles derived from
+OpenStreetMap. Map tiles, geocoding, road routing, weather, provider switching,
+and similar requests are made only when the corresponding screen or function is
+used. These requests contain the coordinates or query needed for the feature and
+are subject to the selected provider's terms and privacy policy.
 
 ### Retention and deletion
 

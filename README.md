@@ -19,6 +19,10 @@ sync, workout analysis, and optional self-hosted services.
   temperature, weight, blood pressure, and blood glucose.
 - Local SQLite storage through Rust and `rusqlite`.
 - Huawei watch sync over classic Bluetooth/RFCOMM with HiChain authentication.
+- MapLibre/Protomaps PMTiles basemap by default, with Liberty light and dark
+  styles, orange tracks, numbered kilometer markers, and road labels.
+- Optional AMap raster basemap. Tencent and Baidu provider entries are reserved
+  for builds that configure their official SDK keys.
 - Workout maps, heart-rate curves, splits, elevation, running dynamics, training
   load, training plans, and GPX/TCX export.
 - Long-image sharing for workout details, including the map and all splits.
@@ -38,9 +42,9 @@ server, private domain, API key, or signing key.
   signs in.
 - Ephemeris download, live track sharing, voice streaming, camera streaming, and
   update checks remain unavailable until a URL is configured.
-- Map tiles, place search, routing, and weather are requested only when the
-  related screen or feature is used. They are third-party services and are
-  subject to their own terms.
+- The public default map uses Protomaps/OpenStreetMap PMTiles data. Map tiles,
+  place search, routing, weather, and any provider selected by the user are
+  requested only when the related feature is used.
 - No advertising SDK or product telemetry is included by default.
 
 Read [PRIVACY.md](PRIVACY.md) and [PERMISSIONS.md](PERMISSIONS.md) before
@@ -54,7 +58,7 @@ public issue.
 - Dart 3.13+
 - Rust 1.85+
 - Android SDK/NDK 27+
-- JDK 17
+- JDK 21
 
 The primary tested target is a Huawei Watch GT 5 paired with a OnePlus phone on
 Android 10 or newer. Other watch models, vendors, and aggressive background-power

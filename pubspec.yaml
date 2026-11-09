@@ -42,6 +42,7 @@ dependencies:
   flutter_rust_bridge: 2.13.0
   path_provider: ^2.1.6
   path: ^1.9.1
+  maplibre_gl: ^0.28.0
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,7 @@ flutter:
   generate: true
   assets:
     - assets/i18n/ui_strings.json
+    - assets/config/map_defaults.json
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

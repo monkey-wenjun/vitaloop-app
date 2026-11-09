@@ -14,6 +14,8 @@
   dynamic message, Android notification, app label and TTS voice.
 - Added contributor, security and code-of-conduct documentation.
 - Added alternative destination routes and an in-navigation route switcher.
+- Added a default MapLibre/Protomaps PMTiles map with Liberty light and dark
+  styles, orange tracks, numbered kilometer labels, and road names.
 
 ### Changed
 
@@ -44,4 +46,6 @@
   off-route period; imported fixed routes remain unchanged.
 - Declared the Android vibrate permission so watch-triggered find-phone alerts
   can ring and vibrate reliably.
+- Removed confusing POI dots and dashed administrative boundaries from workout
+  maps.
 - Prevented translated settings chips and long sleep labels from overflowing narrow screens.

@@ -48,6 +48,14 @@ Set<(int, int, int)> _tiles(WidgetTester tester) => {
 };
 
 void main() {
+  setUp(() {
+    MapDisplaySettings.instance.provider = MapBaseProvider.amap;
+  });
+
+  tearDown(() {
+    MapDisplaySettings.instance.provider = MapBaseProvider.pmtiles;
+  });
+
   testWidgets('两点同坐标（跨度为 0）：出图且不炸', (tester) async {
     const same = Offset(31.2304, 121.4737);
     await tester.pumpWidget(_host(const AmapRouteMap(points: [same, same])));

@@ -16,6 +16,7 @@ import '../nav.dart';
 import 'auth_screen.dart';
 import 'bluetooth_devices_screen.dart';
 import 'equipment_screen.dart';
+import 'map_settings_screen.dart';
 import 'permissions_screen.dart';
 import 'watch_screen.dart';
 import 'workout_settings_screen.dart';
@@ -194,6 +195,17 @@ class SettingsScreen extends StatelessWidget {
                   MaterialPageRoute(
                     builder: (_) => const WorkoutSettingsScreen(),
                   ),
+                ),
+              ),
+              VRowItem(
+                icon: Icons.public_rounded,
+                iconBackground: v.tintSky,
+                iconColor: v.skyInk,
+                title: '地图与离线',
+                subtitle: '默认 PMTiles · Liberty / Dark · 当前城市离线缓存',
+                showChevron: true,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const MapSettingsScreen()),
                 ),
               ),
               VRowItem(
@@ -1203,7 +1215,7 @@ class _AboutScreenState extends State<AboutScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              '不登录时：健康数据（心率、睡眠、运动记录、从旧版导入的历史）只写入本机 SQLite，不上传服务器，没有埋点与第三方分析 SDK。\n\n登录后：健康快照通过 HTTPS 上传到你配置的云端服务器账号目录，用于云备份和换机恢复；密码只保存加盐哈希。地图瓦片仍只向高德 autonavi.com 请求当前查看区域，不含健康数据。',
+                              '不登录时：健康数据（心率、睡眠、运动记录、从旧版导入的历史）只写入本机 SQLite，不上传服务器，没有埋点与第三方分析 SDK。\n\n登录后：健康快照通过 HTTPS 上传到你配置的云端服务器账号目录，用于云备份和换机恢复；密码只保存加盐哈希。地图只向当前选择的底图服务请求查看区域瓦片；默认使用自托管友好的 Protomaps PMTiles，不含健康数据。',
                               style: VText.body.copyWith(color: ctx.v.ink2),
                             ),
                           ],

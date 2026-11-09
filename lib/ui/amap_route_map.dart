@@ -8,6 +8,7 @@ import '../data/amap_tile_cache.dart';
 import '../data/map_display.dart';
 import '../theme/tokens.dart';
 import '../util/coordinate.dart';
+import 'pmtiles_route_map.dart';
 
 /// 高德栅格瓦片地图，叠加本地轨迹。
 ///
@@ -217,6 +218,76 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = MapDisplaySettings.instance;
+    if (settings.provider == MapBaseProvider.pmtiles) {
+      return PmtilesRouteMap(
+        points: widget.points,
+        height: widget.height,
+        radius: widget.radius,
+        onTapPoint: widget.onTapPoint,
+        fitInsets: widget.fitInsets,
+        currentPoint: widget.currentPoint,
+        wgs84: widget.wgs84,
+        currentPointWgs84: widget.currentPointWgs84,
+        recenterSignal: widget.recenterSignal,
+        targetPoints: widget.targetPoints,
+        targetPointsWgs84: widget.targetPointsWgs84,
+        targetColor: widget.targetColor,
+        supplyPoints: widget.supplyPoints,
+        supplyPointsWgs84: widget.supplyPointsWgs84,
+        followCurrentPoint: widget.followCurrentPoint,
+        showEndpoints: widget.showEndpoints,
+        showBaseMap: settings.showBaseMap,
+      );
+    }
+    if (settings.provider == MapBaseProvider.tencent ||
+        settings.provider == MapBaseProvider.baidu) {
+      return Stack(
+        children: [
+          PmtilesRouteMap(
+            points: widget.points,
+            height: widget.height,
+            radius: widget.radius,
+            onTapPoint: widget.onTapPoint,
+            fitInsets: widget.fitInsets,
+            currentPoint: widget.currentPoint,
+            wgs84: widget.wgs84,
+            currentPointWgs84: widget.currentPointWgs84,
+            recenterSignal: widget.recenterSignal,
+            targetPoints: widget.targetPoints,
+            targetPointsWgs84: widget.targetPointsWgs84,
+            targetColor: widget.targetColor,
+            supplyPoints: widget.supplyPoints,
+            supplyPointsWgs84: widget.supplyPointsWgs84,
+            followCurrentPoint: widget.followCurrentPoint,
+            showEndpoints: widget.showEndpoints,
+            showBaseMap: false,
+          ),
+          Positioned(
+            left: 12,
+            right: 12,
+            top: 12,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: context.v.glass,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.v.line),
+                ),
+                child: Text(
+                  '${settings.provider.label}需要配置官方 SDK Key；当前仅显示轨迹叠加',
+                  style: VText.label.copyWith(color: context.v.ink2),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     final v = context.v;
     final geometry = _geometry;
     final targetGeometry = _targetGeometry;

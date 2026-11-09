@@ -16,6 +16,13 @@ Upstream: <https://codeberg.org/Freeyourgadget/Gadgetbridge>.
 
 Copyright Google LLC and Dart project authors. BSD-3-Clause.
 
+## MapLibre and Protomaps
+
+`maplibre_gl` and MapLibre Native are BSD-3-Clause, Copyright MapLibre
+contributors. Protomaps PMTiles tooling is BSD-3-Clause, Copyright Protomaps
+LLC. Public default map data is derived from OpenStreetMap under ODbL and must
+retain OpenStreetMap attribution.
+
 ## Kotlin, AndroidX, OkHttp, Gson, SLF4J
 
 Each dependency retains its upstream license. The public source tree records the

@@ -17,7 +17,7 @@
 - Flutter 3.47+
 - Dart 3.13+
 - Rust 1.85+
-- Android SDK/NDK、JDK 17
+- Android SDK/NDK、JDK 21
 
 ```bash
 flutter pub get

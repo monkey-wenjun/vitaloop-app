@@ -2,12 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vitaloop/l10n/app_localizations.dart';
+import 'package:vitaloop/data/map_display.dart';
 import 'package:vitaloop/src/rust/api/types.dart';
 import 'package:vitaloop/theme/tokens.dart';
 import 'package:vitaloop/ui/amap_route_map.dart';
 import 'package:vitaloop/ui/screens/sport_tools_screen.dart';
 
 void main() {
+  setUp(() {
+    MapDisplaySettings.instance.provider = MapBaseProvider.amap;
+  });
+
+  tearDown(() {
+    MapDisplaySettings.instance.provider = MapBaseProvider.pmtiles;
+  });
+
   testWidgets('route planner is map-first and hides snapping controls', (
     tester,
   ) async {

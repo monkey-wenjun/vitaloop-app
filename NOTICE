@@ -43,3 +43,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 6. 字体与图标
    界面使用系统字体与 Material Icons（Apache-2.0），未内嵌第三方商业字体。
+
+7. MapLibre / Protomaps
+   MapLibre Native and maplibre_gl: BSD-3-Clause.
+   Protomaps PMTiles: BSD-3-Clause, Copyright Protomaps LLC.
+   Map data © OpenStreetMap contributors, ODbL.
