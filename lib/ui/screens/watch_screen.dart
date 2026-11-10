@@ -16,6 +16,7 @@ import '../nav.dart';
 import 'ephemeris_screen.dart';
 import 'huawei_account_dialog.dart';
 import 'watch_alarms_screen.dart';
+import 'watch_auth_key_dialog.dart';
 import 'watch_logs_screen.dart';
 import 'watch_tools_screen.dart';
 import 'workout_live_screen.dart';
@@ -748,11 +749,13 @@ class _WatchScreenState extends State<WatchScreen> {
                         iconColor: v.warnInk,
                         title: '认证 key',
                         subtitle: identity.authKey.isEmpty
-                            ? '未找到认证信息'
+                            ? '未找到认证信息：点击可手动录入'
                             : _mask(identity.authKey),
                         value: identity.authKey.isEmpty
                             ? '—'
                             : '${identity.authKey.length} 位',
+                        showChevron: true,
+                        onTap: () => _editAuthKey(identity),
                       ),
                     ],
                   ),
@@ -884,6 +887,18 @@ class _WatchScreenState extends State<WatchScreen> {
   String _mask(String key) {
     if (key.length <= 8) return '••••';
     return '${key.substring(0, 4)}••••${key.substring(key.length - 4)}';
+  }
+
+  Future<void> _editAuthKey(WatchIdentity identity) async {
+    final saved = await showWatchAuthKeyDialog(
+      context,
+      initialKey: identity.authKey,
+    );
+    if (saved == null || !mounted) return;
+    await WatchBridge.instance.saveAuthKey(saved);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('认证 key 已保存，重新连接手表后生效')));
   }
 
   void _goalsSheet(BuildContext context) {

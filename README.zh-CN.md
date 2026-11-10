@@ -34,7 +34,9 @@ Rust 构建数据核心，支持华为手表直连、运动分析、旧版数据
 - **手表同步**：经典蓝牙 RFCOMM + HiChain 认证，增量同步健康数据和运动记录。
   华为/荣耀设备的认证与配对流程参考
   [Gadgetbridge 配对指南](https://gadgetbridge.org/basics/pairing/huawei-honor-pairing/)，
-  改编的协议源码继续保留 AGPL-3.0 归属说明。
+  改编的协议源码继续保留 AGPL-3.0 归属说明。Vitaloop 内的具体步骤——包括手表
+  已绑定官方 App 时如何录入认证 key **免恢复出厂**直接连接——见
+  [docs/HUAWEI_PAIRING.md](docs/HUAWEI_PAIRING.md)（当前仅中文）。
 - **矢量地图**：配置 PMTiles 瓦片源后使用 MapLibre + Protomaps，提供 Liberty
   亮色、Dark 暗色、橙色轨迹、公里编号和道路名称。
 - **地图来源可选**：可切换高德栅格底图；腾讯、百度入口保留给配置官方 SDK Key 的构建。

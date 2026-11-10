@@ -867,6 +867,36 @@ class WatchBridge {
     } catch (_) {}
   }
 
+  /// 手动录入的 HiChain 认证 key：Rust 记录供 autoConnect，原生 prefs 是协议栈
+  /// 真正读取的地方；地址用当前身份（或配对时写入的），两边必须一致。
+  Future<void> saveAuthKey(String authKey) async {
+    var address = '';
+    try {
+      final id = await VitaloopApi.watchIdentity();
+      address = id.address;
+      await VitaloopApi.saveWatchIdentity(
+        WatchIdentity(
+          address: id.address,
+          name: id.name,
+          account: id.account,
+          authKey: authKey,
+          fakeAndroidId: id.fakeAndroidId,
+          huaweiAddress: id.huaweiAddress,
+          lastSyncMs: id.lastSyncMs,
+          migrated: id.migrated,
+          ephemerisUrl: id.ephemerisUrl,
+        ),
+      );
+    } catch (_) {}
+    if (address.isEmpty) return;
+    try {
+      await _method.invokeMethod('save_auth_key', {
+        'mac': address,
+        'auth_key': authKey,
+      });
+    } catch (_) {}
+  }
+
   Future<void> disconnect() async {
     try {
       await _method.invokeMethod('disconnect');

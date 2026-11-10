@@ -37,7 +37,10 @@ Captured from the Android development build with illustrative device data.
 - Huawei watch sync over classic Bluetooth/RFCOMM with HiChain authentication.
   Huawei/Honor authentication and pairing follow
   [Gadgetbridge's pairing guide](https://gadgetbridge.org/basics/pairing/huawei-honor-pairing/),
-  and the adapted protocol sources retain their AGPL-3.0 attribution.
+  and the adapted protocol sources retain their AGPL-3.0 attribution. For the
+  Vitaloop-specific steps — including entering an existing auth key so a watch
+  already paired in the official Huawei app can be connected **without a
+  factory reset** — see [docs/HUAWEI_PAIRING.md](docs/HUAWEI_PAIRING.md).
 - MapLibre/Protomaps PMTiles basemap when a tile source is configured, with
   Liberty light and dark styles, orange tracks, numbered kilometer markers, and
   road labels.
