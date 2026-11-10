@@ -123,7 +123,18 @@ verification guidance.
 ## Optional endpoints
 
 The client is self-hosted-friendly. A cloud server is not bundled with this
-repository.
+repository. The companion server lives in
+[monkey-wenjun/vitaloop-server](https://github.com/monkey-wenjun/vitaloop-server):
+a single static Rust binary providing accounts, health snapshot/delta sync,
+workouts, map style/tile proxying, and a read-only MCP (Model Context Protocol)
+endpoint (`POST /mcp`) that lets AI assistants query blood pressure, glucose,
+weight, sleep, HRV, and other data with the same account bearer token.
+
+Deploy it with Docker Compose from that repository:
+
+```bash
+docker compose up -d   # builds the image and serves 127.0.0.1:8793
+```
 
 For a build with a default cloud URL:
 

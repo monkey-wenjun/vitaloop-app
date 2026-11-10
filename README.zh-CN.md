@@ -108,7 +108,17 @@ VITALOOP_KEY_PASSWORD
 
 ## 可选服务地址
 
-本仓库只包含客户端，不包含可直接部署的云同步服务端。
+本仓库只包含客户端，不包含可直接部署的云同步服务端。配套服务端见
+[monkey-wenjun/vitaloop-server](https://github.com/monkey-wenjun/vitaloop-server)：
+单个静态 Rust 二进制，提供账号体系、健康快照/增量同步、运动记录、地图样式/瓦片代理，
+以及只读 **MCP（Model Context Protocol）** 接口（`POST /mcp`），AI 助手可用同一账号
+Bearer 会话直接读取血压、血糖、体重、睡眠、HRV 等数据。
+
+在该仓库根目录用 Docker Compose 一键部署：
+
+```bash
+docker compose up -d   # 构建镜像并监听 127.0.0.1:8793
+```
 
 如果希望构建一个带默认云地址的版本：
 
