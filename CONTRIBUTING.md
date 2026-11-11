@@ -20,7 +20,7 @@
 - Android SDK/NDK、JDK 21
 
 ```bash
-./scripts/install-git-hooks.sh   # 启用提交/推送前的 awen.me 域名检查
+./scripts/install-git-hooks.sh   # 启用提交/推送前的私有域名/IP 检查
 flutter pub get
 flutter gen-l10n
 flutter analyze
@@ -28,11 +28,15 @@ flutter test
 cd rust && cargo test
 ```
 
-域名检查可手动执行：
+脱敏检查可手动执行：
 
 ```bash
-./scripts/check-domains.sh --all
+./scripts/check-private-endpoints.sh --all
 ```
+
+私有匹配规则不保存在仓库里。CI 通过仓库 secret
+`VITALOOP_PRIVATE_PATTERNS` 注入；本地可设置同名环境变量，或写入
+`.git/vitaloop-private-patterns`（不会提交）。
 
 ## 文案与翻译
 
@@ -65,4 +69,4 @@ PR 请说明：
 
 元环默认离线。任何新增上传、遥测、第三方 SDK 或云端处理都需要显式开关、
 隐私说明和用户同意，不能默认开启，也不能把健康数据用于广告画像。
-�
+�
