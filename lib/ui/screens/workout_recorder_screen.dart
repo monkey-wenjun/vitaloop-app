@@ -80,6 +80,7 @@ class _WorkoutRecorderScreenState extends State<WorkoutRecorderScreen> {
   int _lastGuidanceTs = 0;
   int _navSpokenAt = 0;
   String _navSpokenKey = '';
+  GpsFix? _lastKnown;
 
   bool get _running => _watch.isRunning;
   bool get _started => _startedAt != null;
@@ -119,6 +120,19 @@ class _WorkoutRecorderScreenState extends State<WorkoutRecorderScreen> {
       Offset(p.lat, p.lon),
   ];
 
+  String get _gpsHint {
+    final failed = _gps.state.value.startsWith('failed')
+        ? _gps.state.value.replaceFirst('failed:', '')
+        : null;
+    if (!_started) {
+      if (failed != null) return failed;
+      return _gps.fixes.value.isEmpty ? '正在获取当前位置…' : '已定位 · 可以开始';
+    }
+    if (!_gps.active.value) return failed ?? 'GPS 未开启';
+    if (_gps.fixes.value.isEmpty) return 'GPS 定位中…';
+    return 'GPS 已定位 · ${_gps.fixes.value.length} 个轨迹点';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -129,6 +143,15 @@ class _WorkoutRecorderScreenState extends State<WorkoutRecorderScreen> {
       ]);
     }
     _loadSettings();
+    unawaited(_loadLastKnown());
+    // 先把定位跑起来，背景地图打开就能落到当前位置；正式开始时再清空轨迹。
+    if (_outdoor) unawaited(_gps.start());
+  }
+
+  Future<void> _loadLastKnown() async {
+    final fix = await _gps.lastKnown();
+    if (!mounted || fix == null) return;
+    setState(() => _lastKnown = fix);
   }
 
   @override
@@ -392,6 +415,18 @@ class _WorkoutRecorderScreenState extends State<WorkoutRecorderScreen> {
       Navigator.of(context).pop();
       return;
     }
+    // 5 分钟以内不值得留档：误触开始、刚开表就结束，不该产生一条垃圾记录。
+    if (elapsed <= 5 * 60) {
+      _pause();
+      await TtsBridge.instance.stop();
+      await _gps.stop();
+      await _gps.keepScreenOn(false);
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.of(context).pop();
+      messenger.showSnackBar(const SnackBar(content: Text('运动不超过 5 分钟，本次不保存')));
+      return;
+    }
     _pause();
     await TtsBridge.instance.stop();
     await _gps.stop();
@@ -528,323 +563,430 @@ class _WorkoutRecorderScreenState extends State<WorkoutRecorderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 定位可能在按下开始前就到，不能只靠计时器里的 setState 刷新地图。
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _gps.fixes,
+        _gps.active,
+        _gps.state,
+        _gps.speedMps,
+      ]),
+      builder: (context, _) => _buildScreen(context),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     final v = context.v;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final safeTop = MediaQuery.paddingOf(context).top;
+    final fixes = _gps.fixes.value;
+    final trackPoints = [for (final fix in fixes) Offset(fix.lat, fix.lon)];
+    final known = _lastKnown;
+    final anchor = trackPoints.isNotEmpty
+        ? trackPoints.last
+        : (known == null ? null : Offset(known.lat, known.lon));
+    final routePoints = _routeMapPoints;
+    final hasActualTrack = trackPoints.length >= 2;
+    // 和实时码表一样把地图铺满整页；一个坐标都没有时不能挂地图，
+    // 否则相机会停在 (0, 0) 的海面。
+    final showMap =
+        _outdoor &&
+        (trackPoints.isNotEmpty || anchor != null || routePoints.isNotEmpty);
+    final mapInsets = EdgeInsets.fromLTRB(
+      24,
+      safeTop + 96,
+      24,
+      screenHeight * 0.5,
+    );
+    final statusText = !_started
+        ? '准备开始'
+        : (_running ? '正在记录' : (_autoPaused ? '自动暂停' : '已暂停'));
+    final statusColor = _running
+        ? v.greenInk
+        : (_autoPaused ? v.warnInk : v.muted);
     return Scaffold(
       backgroundColor: v.bg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () async {
-                      final quit = await _confirmQuit();
-                      if (quit == true && context.mounted) {
-                        Navigator.of(context).pop();
-                      }
-                    },
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                  const Spacer(),
-                  Text(
-                    widget.title,
-                    style: VText.meta.copyWith(color: v.muted),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 48),
-                ],
-              ),
-              const Spacer(),
-              if (!_started) ...[
-                Container(
-                  width: 108,
-                  height: 108,
-                  decoration: BoxDecoration(
-                    color: v.tintBlue,
-                    borderRadius: BorderRadius.circular(36),
-                  ),
-                  child: Icon(widget.icon, size: 54, color: v.blueInk),
-                ),
-                const SizedBox(height: 26),
-              ],
-              Text(
-                _fmt(_seconds),
-                style: VText.h1.copyWith(
-                  fontSize: 72,
-                  color: v.ink,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                !_started
-                    ? '准备开始'
-                    : (_running
-                          ? '正在记录'
-                          : (_autoPaused ? '自动暂停 · 检测到移动后恢复' : '已暂停')),
-                style: VText.meta.copyWith(
-                  color: _running
-                      ? v.greenInk
-                      : (_autoPaused ? v.warnInk : v.muted),
-                ),
-              ),
-              if (_outdoor) ...[
-                const SizedBox(height: 6),
-                Text(
-                  !_started
-                      ? '点击开始后开启 GPS'
-                      : (_gps.active.value
-                            ? (_gps.fixes.value.isEmpty
-                                  ? 'GPS 定位中…'
-                                  : 'GPS 已定位 · ${_gps.fixes.value.length} 个轨迹点')
-                            : (_gps.state.value.startsWith('failed')
-                                  ? _gps.state.value.replaceFirst('failed:', '')
-                                  : 'GPS 未开启')),
-                  style: VText.label.copyWith(color: v.muted),
-                ),
-                if (widget.route != null) ...[
-                  const SizedBox(height: 12),
-                  AmapRouteMap(
-                    points: _routeMapPoints,
-                    height: 190,
-                    currentPoint: _gps.fixes.value.isEmpty
-                        ? null
-                        : Offset(
-                            _gps.fixes.value.last.lat,
-                            _gps.fixes.value.last.lon,
-                          ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: showMap
+                ? AmapRouteMap(
+                    points: trackPoints,
+                    height: null,
+                    radius: 0,
+                    fitInsets: mapInsets,
+                    wgs84: true,
+                    currentPoint: anchor,
                     currentPointWgs84: true,
+                    targetPoints: routePoints,
+                    followCurrentPoint: routePoints.isEmpty || hasActualTrack,
+                    showEndpoints: false,
+                  )
+                : DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          v.bg,
+                          v.tintBlue.withValues(alpha: v.isDark ? 0.45 : 0.8),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  VCard(
-                    background: _navOffRoute ? v.tintPeach : v.tintGreen,
-                    child: Row(
+          ),
+          if (showMap)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.18),
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.12),
+                      ],
+                      stops: const [0, 0.35, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Column(
+                  children: [
+                    Row(
                       children: [
-                        Icon(
-                          _navArrived
-                              ? Icons.flag_rounded
-                              : (_navOffRoute
-                                    ? Icons.wrong_location_rounded
-                                    : Icons.navigation_rounded),
-                          color: _navOffRoute ? v.warnInk : v.greenInk,
+                        IconButton.filledTonal(
+                          onPressed: () async {
+                            final quit = await _confirmQuit();
+                            if (quit == true && context.mounted) {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                          icon: const Icon(Icons.arrow_back_rounded),
+                          style: IconButton.styleFrom(
+                            backgroundColor: v.glass,
+                            foregroundColor: v.ink,
+                          ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _navInstruction.isEmpty
-                                    ? '等待定位后开始路线引导'
-                                    : _navInstruction,
-                                style: VText.h3.copyWith(
-                                  fontSize: 15,
-                                  color: _navOffRoute ? v.warnInk : v.ink,
-                                ),
-                              ),
-                              if (_navRemainingM > 0) ...[
-                                const SizedBox(height: 3),
-                                Text(
-                                  '距终点 ${(_navRemainingM / 1000).toStringAsFixed(2)} km',
-                                  style: VText.label.copyWith(color: v.muted),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: v.glass,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(widget.icon, size: 18, color: v.blueInk),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    widget.title,
+                                    style: VText.h3.copyWith(color: v.ink),
+                                  ),
                                 ),
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ] else if (_gps.fixes.value.length >= 2) ...[
-                  const SizedBox(height: 12),
-                  AmapRouteMap(
-                    points: [
-                      for (final fix in _gps.fixes.value)
-                        Offset(fix.lat, fix.lon),
-                    ],
-                    height: 190,
-                    wgs84: true,
-                  ),
-                ],
-              ],
-              if (_outdoor) ...[
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: VStat(
-                        label: '距离',
-                        value: _liveDistanceKm.toStringAsFixed(2),
-                        unit: 'km',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: VStat(
-                        label: '实时速度',
-                        value: (_gps.speedMps.value * 3.6).toStringAsFixed(1),
-                        unit: 'km/h',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: VStat(
-                        label: '当前心率',
-                        value: _currentHr > 0 ? '$_currentHr' : '--',
-                        unit: 'bpm',
-                      ),
-                    ),
-                  ],
-                ),
-                if (_cycling) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: VStat(
-                          label: '当前功率',
-                          value: _powerWatts > 0
-                              ? _powerWatts.round().toString()
-                              : '--',
-                          unit: 'W',
+                    if (_outdoor && widget.route != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                        decoration: BoxDecoration(
+                          color: _navOffRoute ? v.tintPeach : v.tintGreen,
+                          borderRadius: BorderRadius.circular(18),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: VStat(
-                          label: '平均功率',
-                          value: _avgPower > 0 ? '$_avgPower' : '--',
-                          unit: 'W',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: VStat(
-                          label: '最大功率',
-                          value: _powerMax > 0
-                              ? _powerMax.round().toString()
-                              : '--',
-                          unit: 'W',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _navArrived
+                                  ? Icons.flag_rounded
+                                  : (_navOffRoute
+                                        ? Icons.wrong_location_rounded
+                                        : Icons.navigation_rounded),
+                              size: 20,
+                              color: _navOffRoute ? v.warnInk : v.greenInk,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _navInstruction.isEmpty
+                                        ? '等待定位后开始路线引导'
+                                        : _navInstruction,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: VText.h3.copyWith(
+                                      fontSize: 14,
+                                      color: _navOffRoute ? v.warnInk : v.ink,
+                                    ),
+                                  ),
+                                  if (_navRemainingM > 0) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '距终点 ${(_navRemainingM / 1000).toStringAsFixed(2)} km',
+                                      style: VText.label.copyWith(
+                                        fontSize: 10.5,
+                                        color: v.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
-                ],
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: VStat(
-                        label: '平均配速',
-                        value: _liveDistanceKm >= 0.01
-                            ? fmtPace(_liveDistanceKm * 1000, _seconds)
-                            : '--',
-                        unit: '/km',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: VStat(
-                        label: '热量',
-                        value: '$_calories',
-                        unit: '千卡',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: VStat(
-                        label: '海拔',
-                        value: _altitude > 0
-                            ? _altitude.toStringAsFixed(0)
-                            : '--',
-                        unit: 'm',
-                      ),
-                    ),
                   ],
                 ),
-                if (_avgHr > 0) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: VStat(
-                          label: '爬升',
-                          value: _ascentM > 0
-                              ? _ascentM.toStringAsFixed(0)
-                              : '0',
-                          unit: 'm',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: VStat(
-                          label: '平均心率',
-                          value: '$_avgHr',
-                          unit: 'bpm',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: VStat(
-                          label: '最大心率',
-                          value: '$_hrMax',
-                          unit: 'bpm',
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ] else ...[
-                const SizedBox(height: 30),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _Stat(
-                        label: '热量',
-                        value: '$_calories',
-                        unit: '千卡',
-                      ),
-                    ),
-                    Expanded(
-                      child: _Stat(
-                        label: '时长',
-                        value: _fmt(_seconds),
-                        unit: '',
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const Spacer(),
-              if (!_started)
-                VPrimaryButton(
-                  label: '开始${widget.title}',
-                  icon: Icons.play_arrow_rounded,
-                  onTap: _saving ? null : _start,
-                )
-              else ...[
-                VPrimaryButton(
-                  label: '结束并保存',
-                  icon: Icons.stop_rounded,
-                  onTap: _saving ? null : _finish,
-                ),
-                const SizedBox(height: 10),
-                VGhostButton(
-                  label: _running ? '暂停' : '继续',
-                  icon: _running
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  onTap: _saving ? null : (_running ? _pause : _start),
-                ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: SafeArea(
+              top: false,
+              child: VCard(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _fmt(_seconds),
+                          style: VText.value.copyWith(
+                            fontSize: 46,
+                            height: 0.95,
+                            color: v.ink,
+                            fontWeight: FontWeight.w800,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const Spacer(),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              statusText,
+                              style: VText.label.copyWith(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: statusColor,
+                              ),
+                            ),
+                            if (_outdoor) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                _gpsHint,
+                                style: VText.label.copyWith(
+                                  fontSize: 10,
+                                  color: v.muted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (_outdoor)
+                      ..._outdoorStats()
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: VStat(
+                              label: '热量',
+                              value: '$_calories',
+                              unit: '千卡',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: VStat(
+                              label: '时长',
+                              value: _fmt(_seconds),
+                              unit: '',
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 14),
+                    if (!_started)
+                      VPrimaryButton(
+                        label: '开始${widget.title}',
+                        icon: Icons.play_arrow_rounded,
+                        onTap: _saving ? null : _start,
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: VGhostButton(
+                              label: _running ? '暂停' : '继续',
+                              icon: _running
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              onTap: _saving
+                                  ? null
+                                  : (_running ? _pause : _start),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: VPrimaryButton(
+                              label: '结束',
+                              icon: Icons.stop_rounded,
+                              onTap: _saving ? null : _finish,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  List<Widget> _outdoorStats() => [
+    Row(
+      children: [
+        Expanded(
+          child: VStat(
+            label: '距离',
+            value: _liveDistanceKm.toStringAsFixed(2),
+            unit: 'km',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: VStat(
+            label: '实时速度',
+            value: (_gps.speedMps.value * 3.6).toStringAsFixed(1),
+            unit: 'km/h',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: VStat(
+            label: '当前心率',
+            value: _currentHr > 0 ? '$_currentHr' : '--',
+            unit: 'bpm',
+          ),
+        ),
+      ],
+    ),
+    if (_cycling) ...[
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: VStat(
+              label: '当前功率',
+              value: _powerWatts > 0 ? _powerWatts.round().toString() : '--',
+              unit: 'W',
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: VStat(
+              label: '平均功率',
+              value: _avgPower > 0 ? '$_avgPower' : '--',
+              unit: 'W',
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: VStat(
+              label: '最大功率',
+              value: _powerMax > 0 ? _powerMax.round().toString() : '--',
+              unit: 'W',
+            ),
+          ),
+        ],
+      ),
+    ],
+    const SizedBox(height: 8),
+    Row(
+      children: [
+        Expanded(
+          child: VStat(
+            label: '平均配速',
+            value: _liveDistanceKm >= 0.01
+                ? fmtPace(_liveDistanceKm * 1000, _seconds)
+                : '--',
+            unit: '/km',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: VStat(label: '热量', value: '$_calories', unit: '千卡'),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: VStat(
+            label: '海拔',
+            value: _altitude > 0 ? _altitude.toStringAsFixed(0) : '--',
+            unit: 'm',
+          ),
+        ),
+      ],
+    ),
+    if (_avgHr > 0) ...[
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: VStat(
+              label: '爬升',
+              value: _ascentM > 0 ? _ascentM.toStringAsFixed(0) : '0',
+              unit: 'm',
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: VStat(label: '平均心率', value: '$_avgHr', unit: 'bpm'),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: VStat(label: '最大心率', value: '$_hrMax', unit: 'bpm'),
+          ),
+        ],
+      ),
+    ],
+  ];
 
   Future<bool?> _confirmQuit() {
     if (!_started) return Future.value(true);
@@ -864,37 +1006,6 @@ class _WorkoutRecorderScreenState extends State<WorkoutRecorderScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value, required this.unit});
-
-  final String label;
-  final String value;
-  final String unit;
-
-  @override
-  Widget build(BuildContext context) {
-    final v = context.v;
-    return Column(
-      children: [
-        Text(label, style: VText.label.copyWith(color: v.muted)),
-        const SizedBox(height: 4),
-        Text.rich(
-          TextSpan(
-            text: value,
-            style: VText.value.copyWith(fontSize: 24, color: v.ink),
-            children: [
-              TextSpan(
-                text: ' $unit',
-                style: VText.label.copyWith(color: v.muted),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

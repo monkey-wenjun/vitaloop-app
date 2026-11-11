@@ -194,57 +194,19 @@ class SleepNightHero extends StatelessWidget {
               ],
             ),
           );
-          final efficiency = Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: colors.mint.withValues(alpha: colors.isDark ? 0.35 : 0.62),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: colors.mintInk.withValues(alpha: 0.10)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.sleepEfficiency,
-                  style: VText.label.copyWith(
-                    fontSize: 9,
-                    color: colors.mintInk,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${summary.efficiency}%',
-                  style: VText.h2.copyWith(color: colors.mintInk),
-                ),
-              ],
-            ),
-          );
           if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    ring,
-                    SizedBox(width: veryCompact ? 11 : 16),
-                    copy,
-                  ],
-                ),
-                const SizedBox(height: 13),
-                Align(alignment: Alignment.centerLeft, child: efficiency),
+                ring,
+                SizedBox(width: veryCompact ? 11 : 16),
+                copy,
               ],
             );
           }
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              ring,
-              const SizedBox(width: 22),
-              copy,
-              const SizedBox(width: 18),
-              efficiency,
-            ],
+            children: [ring, const SizedBox(width: 22), copy],
           );
         },
       ),
@@ -323,7 +285,6 @@ class SleepPeriodHero extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${l10n.sleepEfficiency} ${period.efficiency}% · '
                       '${(period.deepShare * 100).round()}% ${l10n.deepSleepShare}',
                       style: VText.meta.copyWith(color: colors.muted),
                     ),
@@ -438,7 +399,6 @@ class SleepPeriodCompositionCard extends StatelessWidget {
         (SleepStageKind.deep, period.avgDeep),
       ],
       footer: [
-        (l10n.sleepEfficiency, '${period.efficiency}%'),
         (l10n.totalSleep, l10n.sleepDurationText(period.avgTotal.round())),
       ],
     );

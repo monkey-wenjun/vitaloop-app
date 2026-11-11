@@ -666,21 +666,67 @@ class VSegmented extends StatelessWidget {
   }
 }
 
-class VRangeBars extends StatelessWidget {
+class VRangeBars extends StatefulWidget {
   const VRangeBars({
     super.key,
     required this.buckets,
     required this.color,
     this.height = 96,
+    this.zeroBased = true,
+    this.unit = '',
+    this.valueFormat,
+    this.dateLabel,
   });
 
   final List<RangeBucket> buckets;
   final Color color;
   final double height;
 
+  /// 计数/时长/距离这类「累加值」柱形图应从 0 起，否则 7 小时和 7.5 小时
+  /// 会被画成看起来差一倍的高矮。只有需要强调相对变化的场景才关掉。
+  final bool zeroBased;
+  final String unit;
+  final String Function(double value)? valueFormat;
+  final String Function(RangeBucket bucket)? dateLabel;
+
+  @override
+  State<VRangeBars> createState() => _VRangeBarsState();
+}
+
+class _VRangeBarsState extends State<VRangeBars> {
+  int? _index;
+
+  void _select(double dx, double width) {
+    final count = widget.buckets.length;
+    if (count == 0) return;
+    final index = ((dx / math.max(1.0, width)) * count).floor().clamp(
+      0,
+      count - 1,
+    );
+    if (_index != index) setState(() => _index = index);
+  }
+
+  double _xOf(int index, double width) {
+    final count = widget.buckets.length;
+    if (count == 0) return width / 2;
+    return (index + 0.5) / count * width;
+  }
+
+  List<String> _tipLines(RangeBucket bucket) {
+    final date =
+        widget.dateLabel?.call(bucket) ??
+        '${bucket.start.month}/${bucket.start.day}';
+    final value = bucket.value > 0
+        ? '${(widget.valueFormat ?? _defaultChartValue)(bucket.value)}'
+              '${widget.unit.isEmpty ? '' : ' ${widget.unit}'}'
+        : '无记录';
+    return [date, value];
+  }
+
   @override
   Widget build(BuildContext context) {
     final v = context.v;
+    final buckets = widget.buckets;
     if (buckets.isEmpty) {
       return SizedBox(
         height: 90,
@@ -704,7 +750,9 @@ class VRangeBars extends StatelessWidget {
       if (value < min) min = value;
       if (value > max) max = value;
     }
-    final span = (max - min).abs() < 0.0001 ? 1.0 : max - min;
+    final base = widget.zeroBased ? 0.0 : min;
+    final top = math.max(max, base);
+    final span = (top - base).abs() < 0.0001 ? 1.0 : top - base;
     final count = buckets.length;
     // 高亮给最近一次真的有数据的桶，而不是窗口最后一天——窗口末尾常常是空的。
     var highlight = -1;
@@ -714,40 +762,79 @@ class VRangeBars extends StatelessWidget {
         break;
       }
     }
-    final barSpace = height - 20;
+    final barSpace = widget.height - 20;
+    final index = _index != null && _index! < count ? _index : null;
     return Column(
       children: [
         SizedBox(
-          height: height,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              for (var i = 0; i < count; i++) ...[
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      // 柱宽封顶：数据点少（如手动血压/体重）时避免 Expanded 撑成整块色板
-                      Container(
-                        constraints: const BoxConstraints(maxWidth: 18),
-                        width: double.infinity,
-                        // 无数据的桶只留一条底线，否则整排等高的实心柱会让人误以为有活动
-                        height: buckets[i].value <= 0
-                            ? 3
-                            : 8 + barSpace * ((buckets[i].value - min) / span),
-                        decoration: BoxDecoration(
-                          color: i == highlight
-                              ? color
-                              : color.withValues(alpha: v.isDark ? 0.45 : 0.28),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
+          height: widget.height,
+          width: double.infinity,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (d) => _select(d.localPosition.dx, width),
+                      onHorizontalDragStart: (d) =>
+                          _select(d.localPosition.dx, width),
+                      onHorizontalDragUpdate: (d) =>
+                          _select(d.localPosition.dx, width),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          for (var i = 0; i < count; i++) ...[
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  // 柱宽封顶：数据点少（如手动血压/体重）时避免
+                                  // Expanded 撑成整块色板。
+                                  Container(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 18,
+                                    ),
+                                    width: double.infinity,
+                                    // 无数据的桶只留一条底线，否则整排等高的实心柱
+                                    // 会让人误以为有活动。
+                                    height: buckets[i].value <= 0
+                                        ? 3
+                                        : 8 +
+                                              barSpace *
+                                                  ((buckets[i].value - base) /
+                                                          span)
+                                                      .clamp(0.0, 1.0),
+                                    decoration: BoxDecoration(
+                                      color: i == highlight
+                                          ? widget.color
+                                          : widget.color.withValues(
+                                              alpha: v.isDark ? 0.45 : 0.28,
+                                            ),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (i != count - 1)
+                              SizedBox(width: count > 16 ? 2 : 5),
+                          ],
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                if (i != count - 1) SizedBox(width: count > 16 ? 2 : 5),
-              ],
-            ],
+                  if (index != null)
+                    _ChartTipOverlay(
+                      x: _xOf(index, width),
+                      width: width,
+                      lines: _tipLines(buckets[index]),
+                    ),
+                ],
+              );
+            },
           ),
         ),
         const SizedBox(height: 6),
@@ -852,6 +939,205 @@ class _ChartTip extends StatelessWidget {
   }
 }
 
+/// 所有趋势折线图共用的几何规则。
+///
+/// 之前 [VRangeLine] 画直线，[HeartRateCurve] / [MultiLineChart] 用中点二次
+/// 贝塞尔：留白、描边宽度、填充透明度、单点处理都不一样，同一指标切换
+/// 日/周/月会看到两种画风；重复 x 还会让曲线在竖直方向折返，看起来像
+/// “拐弯”。这里把坐标映射、平滑、填充、网格统一成一套。
+class _TrendLine {
+  const _TrendLine._();
+
+  static const double padX = 4;
+  static const double padY = 8;
+  static const double _strokeWidth = 2.2;
+
+  static double _plotWidth(double width) => math.max(1.0, width - padX * 2);
+
+  /// 把 0..1 的横向比例换成画布 x，曲线与 tip 指示线共用。
+  static double xForFraction(double fraction, double width) =>
+      padX + fraction.clamp(0.0, 1.0) * _plotWidth(width);
+
+  /// 数据 x 在整段范围里的比例。
+  static double fractionForDataX(double x, double minX, double maxX) =>
+      maxX <= minX ? 0.5 : ((x - minX) / (maxX - minX)).clamp(0.0, 1.0);
+
+  /// 把画布上的点击 dx 反算成数据 x，用于选中最近的采样点。
+  static double dataXForDx(
+    double dx,
+    double width, {
+    required double minX,
+    required double maxX,
+  }) {
+    final fraction = ((dx - padX) / _plotWidth(width)).clamp(0.0, 1.0);
+    return minX + fraction * math.max(1.0, maxX - minX);
+  }
+
+  /// 排序并去掉同 x 的重复采样，同一时刻只保留最后一个值。
+  static List<Offset> tidy(Iterable<Offset> points) {
+    final sorted = points.toList()..sort((a, b) => a.dx.compareTo(b.dx));
+    final out = <Offset>[];
+    for (final point in sorted) {
+      if (out.isNotEmpty && point.dx <= out.last.dx + 1e-6) {
+        out[out.length - 1] = point;
+      } else {
+        out.add(point);
+      }
+    }
+    return out;
+  }
+
+  /// 纵轴范围：统一留 8% 呼吸空间；常量序列人为撑开 ±1，避免贴边。
+  static (double, double) yBounds(Iterable<double> values) {
+    var min = values.first;
+    var max = values.first;
+    for (final value in values) {
+      min = math.min(min, value);
+      max = math.max(max, value);
+    }
+    if ((max - min).abs() < 0.0001) return (min - 1, max + 1);
+    final pad = (max - min) * 0.08;
+    return (min - pad, max + pad);
+  }
+
+  static List<Offset> project(
+    List<Offset> points,
+    Size size, {
+    required double minX,
+    required double maxX,
+    required double minY,
+    required double maxY,
+  }) {
+    final spanX = math.max(1e-9, maxX - minX);
+    final spanY = math.max(1e-9, maxY - minY);
+    final width = _plotWidth(size.width);
+    final height = math.max(1.0, size.height - padY * 2);
+    return [
+      for (final point in points)
+        Offset(
+          padX + (point.dx - minX) / spanX * width,
+          padY + (1 - (point.dy - minY) / spanY) * height,
+        ),
+    ];
+  }
+
+  /// 单调三次 Hermite（Fritsch–Carlson）转三次贝塞尔。
+  ///
+  /// 曲线一定穿过每个采样点，局部极值处切线为 0：既不会像中点二次贝塞尔
+  /// 那样在两值之间凭空鼓包，也不会把相邻尖峰抹成 S 形拐角。
+  static Path smoothPath(List<Offset> points) {
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    final count = points.length;
+    if (count < 2) return path;
+
+    final dxs = <double>[];
+    final slopes = <double>[];
+    for (var i = 0; i < count - 1; i++) {
+      final dx = math.max(1e-6, points[i + 1].dx - points[i].dx);
+      dxs.add(dx);
+      slopes.add((points[i + 1].dy - points[i].dy) / dx);
+    }
+    final tangents = List<double>.filled(count, 0);
+    tangents[0] = slopes.first;
+    tangents[count - 1] = slopes.last;
+    for (var i = 1; i < count - 1; i++) {
+      final prev = slopes[i - 1];
+      final next = slopes[i];
+      if (prev * next <= 0) {
+        tangents[i] = 0;
+      } else {
+        final w1 = 2 * dxs[i] + dxs[i - 1];
+        final w2 = dxs[i] + 2 * dxs[i - 1];
+        tangents[i] = (w1 + w2) / (w1 / prev + w2 / next);
+      }
+    }
+    for (var i = 0; i < count - 1; i++) {
+      final dx = dxs[i];
+      final c1 = Offset(
+        points[i].dx + dx / 3,
+        points[i].dy + tangents[i] * dx / 3,
+      );
+      final c2 = Offset(
+        points[i + 1].dx - dx / 3,
+        points[i + 1].dy - tangents[i + 1] * dx / 3,
+      );
+      path.cubicTo(
+        c1.dx,
+        c1.dy,
+        c2.dx,
+        c2.dy,
+        points[i + 1].dx,
+        points[i + 1].dy,
+      );
+    }
+    return path;
+  }
+
+  static void paintGrid(Canvas canvas, Size size, Color color) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (var i = 1; i < 4; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  static void paintArea(
+    Canvas canvas,
+    Path line,
+    Offset first,
+    Offset last,
+    Size size,
+    Color color,
+  ) {
+    final fill = Path.from(line)
+      ..lineTo(last.dx, size.height - padY)
+      ..lineTo(first.dx, size.height - padY)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [color.withValues(alpha: 0.18), color.withValues(alpha: 0)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
+    );
+  }
+
+  static void paintStroke(Canvas canvas, Path line, Color color) {
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _strokeWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  static void paintDot(Canvas canvas, Offset point, Color color) {
+    canvas.drawCircle(
+      point,
+      2.6,
+      Paint()..color = color.withValues(alpha: 0.55),
+    );
+    canvas.drawCircle(point, 1.6, Paint()..color = color);
+  }
+
+  static void paintHighlight(Canvas canvas, Size size, double x, Color color) {
+    canvas.drawLine(
+      Offset(x, padY),
+      Offset(x, size.height - padY),
+      Paint()
+        ..color = color.withValues(alpha: 0.45)
+        ..strokeWidth = 1.2,
+    );
+  }
+}
+
 /// 连续指标的日/周/月趋势线。空桶断开而不是补 0，避免「那天没测」被画成
 /// 「心率掉到 0」；x 轴仍按完整窗口铺开，所以稀疏数据的时间位置不会跑偏。
 class VRangeLine extends StatefulWidget {
@@ -886,16 +1172,18 @@ class _VRangeLineState extends State<VRangeLine> {
   void _select(double dx, double width) {
     final count = widget.buckets.length;
     if (count == 0) return;
-    final index = (((dx - 4) / math.max(1.0, width - 8)) * (count - 1))
-        .round()
-        .clamp(0, count - 1)
-        .toInt();
+    final index = _TrendLine.dataXForDx(
+      dx,
+      width,
+      minX: 0,
+      maxX: (count - 1).toDouble(),
+    ).round().clamp(0, count - 1);
     if (_index != index) setState(() => _index = index);
   }
 
   double _xOf(int index, double width) {
     if (widget.buckets.length <= 1) return width / 2;
-    return 4 + index / (widget.buckets.length - 1) * (width - 8);
+    return _TrendLine.xForFraction(index / (widget.buckets.length - 1), width);
   }
 
   List<String> _tipLines(RangeBucket bucket) {
@@ -1000,13 +1288,7 @@ class _RangeLinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = grid
-      ..strokeWidth = 1;
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
+    _TrendLine.paintGrid(canvas, size, grid);
 
     final measured = <int, double>{
       for (var i = 0; i < buckets.length; i++)
@@ -1014,36 +1296,16 @@ class _RangeLinePainter extends CustomPainter {
     };
     if (measured.isEmpty) return;
 
-    var min = measured.values.first;
-    var max = measured.values.first;
-    for (final value in measured.values) {
-      if (value < min) min = value;
-      if (value > max) max = value;
-    }
-    if ((max - min).abs() < 0.0001) {
-      min -= 1;
-      max += 1;
-    } else {
-      final pad = (max - min) * 0.12;
-      min -= pad;
-      max += pad;
-    }
-
-    const left = 4.0;
-    const right = 4.0;
-    const top = 8.0;
-    const bottom = 8.0;
-    double nx(int i) => buckets.length <= 1
-        ? size.width / 2
-        : left + i / (buckets.length - 1) * (size.width - left - right);
-    double ny(double value) =>
-        top + (1 - (value - min) / (max - min)) * (size.height - top - bottom);
+    final (minY, maxY) = _TrendLine.yBounds(measured.values);
+    final single = buckets.length <= 1;
+    final minX = single ? -0.5 : 0.0;
+    final maxX = single ? 0.5 : (buckets.length - 1).toDouble();
 
     final segments = <List<Offset>>[];
     if (connectGaps) {
       final points = <Offset>[
         for (var i = 0; i < buckets.length; i++)
-          if (buckets[i].value > 0) Offset(nx(i), ny(buckets[i].value)),
+          if (buckets[i].value > 0) Offset(i.toDouble(), buckets[i].value),
       ];
       if (points.isNotEmpty) segments.add(points);
     } else {
@@ -1051,7 +1313,7 @@ class _RangeLinePainter extends CustomPainter {
       for (var i = 0; i < buckets.length; i++) {
         final value = buckets[i].value;
         if (value > 0) {
-          current.add(Offset(nx(i), ny(value)));
+          current.add(Offset(i.toDouble(), value));
         } else if (current.isNotEmpty) {
           segments.add(current);
           current = <Offset>[];
@@ -1061,61 +1323,42 @@ class _RangeLinePainter extends CustomPainter {
     }
 
     for (final segment in segments) {
-      if (segment.length >= 2) {
-        final path = Path()..moveTo(segment.first.dx, segment.first.dy);
-        for (var i = 1; i < segment.length; i++) {
-          path.lineTo(segment[i].dx, segment[i].dy);
-        }
-        final fill = Path.from(path)
-          ..lineTo(segment.last.dx, size.height - bottom)
-          ..lineTo(segment.first.dx, size.height - bottom)
-          ..close();
-        canvas.drawPath(
-          fill,
-          Paint()
-            ..shader =
-                LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    color.withValues(alpha: 0.22),
-                    color.withValues(alpha: 0),
-                  ],
-                ).createShader(
-                  Rect.fromLTRB(0, top, size.width, size.height - bottom),
-                ),
-        );
-        canvas.drawPath(
+      final points = _TrendLine.project(
+        segment,
+        size,
+        minX: minX,
+        maxX: maxX,
+        minY: minY,
+        maxY: maxY,
+      );
+      if (points.length >= 2) {
+        final path = _TrendLine.smoothPath(points);
+        _TrendLine.paintArea(
+          canvas,
           path,
-          Paint()
-            ..color = color
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2.2
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
+          points.first,
+          points.last,
+          size,
+          color,
         );
-      } else if (segment.length == 1) {
+        _TrendLine.paintStroke(canvas, path, color);
+      } else if (points.length == 1) {
         // 稀疏指标（体温/体重/血压…）经常整月只有一两个孤立记录。
         // 单点连不成线段，只画网格会让人以为完全没有数据。
-        final p = segment.first;
-        canvas.drawCircle(
-          p,
-          2.6,
-          Paint()..color = color.withValues(alpha: 0.55),
-        );
-        canvas.drawCircle(p, 1.6, Paint()..color = color);
+        _TrendLine.paintDot(canvas, points.first, color);
       }
     }
     if (highlightIndex != null &&
         highlightIndex! >= 0 &&
         highlightIndex! < buckets.length) {
-      final x = nx(highlightIndex!);
-      canvas.drawLine(
-        Offset(x, top),
-        Offset(x, size.height - bottom),
-        Paint()
-          ..color = color.withValues(alpha: 0.45)
-          ..strokeWidth = 1.2,
+      _TrendLine.paintHighlight(
+        canvas,
+        size,
+        _TrendLine.xForFraction(
+          _TrendLine.fractionForDataX(highlightIndex!.toDouble(), minX, maxX),
+          size.width,
+        ),
+        color,
       );
     }
   }
@@ -1630,6 +1873,7 @@ class HeartRateCurve extends StatefulWidget {
     this.unit = '',
     this.valueFormat,
     this.xLabel,
+    this.maxGapMs,
   });
 
   final List<Offset> points;
@@ -1638,6 +1882,10 @@ class HeartRateCurve extends StatefulWidget {
   final String unit;
   final String Function(double value)? valueFormat;
   final String Function(double x)? xLabel;
+
+  /// 两次采样间隔超过该值时断开曲线，避免把手表没戴/没采集的几个小时
+  /// 画成一条横跨全天的假连线。为 null 时保持连续。
+  final double? maxGapMs;
 
   @override
   State<HeartRateCurve> createState() => _HeartRateCurveState();
@@ -1655,8 +1903,7 @@ class _HeartRateCurveState extends State<HeartRateCurve> {
       minX = math.min(minX, p.dx);
       maxX = math.max(maxX, p.dx);
     }
-    final xValue =
-        minX + dx / math.max(1.0, width) * math.max(1.0, maxX - minX);
+    final xValue = _TrendLine.dataXForDx(dx, width, minX: minX, maxX: maxX);
     var best = 0;
     var bestDistance = double.infinity;
     for (var i = 0; i < points.length; i++) {
@@ -1721,6 +1968,7 @@ class _HeartRateCurveState extends State<HeartRateCurve> {
                       highlightFraction: index == null
                           ? null
                           : _fractionOf(points[index].dx),
+                      maxGapMs: widget.maxGapMs,
                     ),
                   ),
                 ),
@@ -1771,8 +2019,7 @@ class _MultiLineChartState extends State<MultiLineChart> {
       minX = math.min(minX, p.dx);
       maxX = math.max(maxX, p.dx);
     }
-    final xValue =
-        minX + dx / math.max(1.0, width) * math.max(1.0, maxX - minX);
+    final xValue = _TrendLine.dataXForDx(dx, width, minX: minX, maxX: maxX);
     var best = all.first.dx;
     var bestDistance = double.infinity;
     for (final p in all) {
@@ -1832,7 +2079,7 @@ class _MultiLineChartState extends State<MultiLineChart> {
               ),
               if (x != null)
                 _ChartTipOverlay(
-                  x: _fractionOf(x) * width,
+                  x: _TrendLine.xForFraction(_fractionOf(x), width),
                   width: width,
                   lines: _tipLines(x),
                 ),
@@ -1881,80 +2128,68 @@ class _MultiLinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = grid
-      ..strokeWidth = 1;
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-    final all = [for (final s in series) ...s.points];
-    if (all.length < 2) return;
-    var minX = all.first.dx,
-        maxX = all.first.dx,
-        minY = all.first.dy,
-        maxY = all.first.dy;
+    _TrendLine.paintGrid(canvas, size, grid);
+    final tidied = <(List<Offset>, Color)>[
+      for (final s in series)
+        if (s.points.isNotEmpty) (_TrendLine.tidy(s.points), s.color),
+    ];
+    final all = [for (final (points, _) in tidied) ...points];
+    if (all.isEmpty) return;
+
+    var minX = all.first.dx, maxX = all.first.dx;
     for (final p in all) {
       minX = math.min(minX, p.dx);
       maxX = math.max(maxX, p.dx);
-      minY = math.min(minY, p.dy);
-      maxY = math.max(maxY, p.dy);
     }
-    double nx(double dx) =>
-        (dx - minX) / math.max(1.0, maxX - minX) * (size.width - 8) + 4;
-    double ny(double dy) =>
-        6 + (1 - (dy - minY) / math.max(1.0, maxY - minY)) * (size.height - 12);
+    if (maxX <= minX) {
+      minX -= 0.5;
+      maxX += 0.5;
+    }
+    final (minY, maxY) = _TrendLine.yBounds([for (final p in all) p.dy]);
 
-    final paths = <(Path, Color)>[];
-    for (final s in series) {
-      if (s.points.isEmpty) continue;
-      final pts = [for (final p in s.points) Offset(nx(p.dx), ny(p.dy))];
-      final path = Path()..moveTo(pts.first.dx, pts.first.dy);
-      for (var i = 0; i < pts.length - 1; i++) {
-        final mid = Offset(
-          (pts[i].dx + pts[i + 1].dx) / 2,
-          (pts[i].dy + pts[i + 1].dy) / 2,
-        );
-        path.quadraticBezierTo(pts[i].dx, pts[i].dy, mid.dx, mid.dy);
-      }
-      path.lineTo(pts.last.dx, pts.last.dy);
-      paths.add((path, s.color));
-    }
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    for (final (path, color) in paths) {
-      final fill = Path.from(path)
-        ..lineTo(size.width - 4, size.height)
-        ..lineTo(4, size.height)
-        ..close();
-      canvas.drawPath(
-        fill,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0)],
-          ).createShader(rect),
-      );
-    }
-    for (final (path, color) in paths) {
-      canvas.drawPath(
+    final projected = <(List<Offset>, Color)>[
+      for (final (points, color) in tidied)
+        (
+          _TrendLine.project(
+            points,
+            size,
+            minX: minX,
+            maxX: maxX,
+            minY: minY,
+            maxY: maxY,
+          ),
+          color,
+        ),
+    ];
+    final paths = <(Path, List<Offset>, Color)>[];
+    for (final (points, color) in projected) {
+      if (points.length < 2) continue;
+      final path = _TrendLine.smoothPath(points);
+      _TrendLine.paintArea(
+        canvas,
         path,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.2
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
+        points.first,
+        points.last,
+        size,
+        color,
       );
+      paths.add((path, points, color));
+    }
+    for (final (path, _, color) in paths) {
+      _TrendLine.paintStroke(canvas, path, color);
+    }
+    for (final (points, color) in projected) {
+      if (points.length == 1) _TrendLine.paintDot(canvas, points.first, color);
     }
     if (highlightX != null) {
-      final x = nx(highlightX!);
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        Paint()
-          ..color = grid.withValues(alpha: 0.9)
-          ..strokeWidth = 1.2,
+      _TrendLine.paintHighlight(
+        canvas,
+        size,
+        _TrendLine.xForFraction(
+          _TrendLine.fractionForDataX(highlightX!, minX, maxX),
+          size.width,
+        ),
+        tidied.first.$2,
       );
     }
   }
@@ -1970,97 +2205,87 @@ class _LinePainter extends CustomPainter {
     required this.color,
     required this.grid,
     required this.highlightFraction,
+    this.maxGapMs,
   });
 
   final List<Offset> points;
   final Color color;
   final Color grid;
   final double? highlightFraction;
+  final double? maxGapMs;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = grid
-      ..strokeWidth = 1;
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    _TrendLine.paintGrid(canvas, size, grid);
+    final points = _TrendLine.tidy(this.points);
+    if (points.isEmpty) return;
+
+    var minX = points.first.dx, maxX = points.first.dx;
+    for (final p in points) {
+      minX = math.min(minX, p.dx);
+      maxX = math.max(maxX, p.dx);
     }
-    if (points.length < 2) return;
-    final normalized = _normalize(points, size);
-    final path = _smoothPath(normalized);
-    final fillPath = Path.from(path)
-      ..lineTo(normalized.last.dx, size.height)
-      ..lineTo(normalized.first.dx, size.height)
-      ..close();
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0)],
-        ).createShader(rect),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.4
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
+    if (maxX <= minX) {
+      minX -= 0.5;
+      maxX += 0.5;
+    }
+    final (minY, maxY) = _TrendLine.yBounds([for (final p in points) p.dy]);
+    for (final segment in _segments(points)) {
+      final projected = _TrendLine.project(
+        segment,
+        size,
+        minX: minX,
+        maxX: maxX,
+        minY: minY,
+        maxY: maxY,
+      );
+      if (projected.length >= 2) {
+        final path = _TrendLine.smoothPath(projected);
+        _TrendLine.paintArea(
+          canvas,
+          path,
+          projected.first,
+          projected.last,
+          size,
+          color,
+        );
+        _TrendLine.paintStroke(canvas, path, color);
+      } else if (projected.length == 1) {
+        _TrendLine.paintDot(canvas, projected.first, color);
+      }
+    }
     if (highlightFraction != null) {
-      final x = highlightFraction! * size.width;
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        Paint()
-          ..color = color.withValues(alpha: 0.45)
-          ..strokeWidth = 1.2,
+      _TrendLine.paintHighlight(
+        canvas,
+        size,
+        _TrendLine.xForFraction(highlightFraction!, size.width),
+        color,
       );
     }
   }
 
-  List<Offset> _normalize(List<Offset> input, Size size) {
-    var minX = input.first.dx, maxX = input.first.dx;
-    var minY = input.first.dy, maxY = input.first.dy;
-    for (final p in input) {
-      minX = math.min(minX, p.dx);
-      maxX = math.max(maxX, p.dx);
-      minY = math.min(minY, p.dy);
-      maxY = math.max(maxY, p.dy);
+  List<List<Offset>> _segments(List<Offset> points) {
+    final gap = maxGapMs;
+    if (gap == null) return [points];
+    final segments = <List<Offset>>[];
+    var current = <Offset>[points.first];
+    for (var i = 1; i < points.length; i++) {
+      if (points[i].dx - points[i - 1].dx > gap) {
+        segments.add(current);
+        current = <Offset>[];
+      }
+      current.add(points[i]);
     }
-    final spanX = math.max(1.0, maxX - minX);
-    final spanY = math.max(1.0, maxY - minY);
-    return [
-      for (final p in input)
-        Offset(
-          (p.dx - minX) / spanX * size.width,
-          6 + (1 - (p.dy - minY) / spanY) * (size.height - 12),
-        ),
-    ];
-  }
-
-  Path _smoothPath(List<Offset> pts) {
-    final path = Path()..moveTo(pts.first.dx, pts.first.dy);
-    for (var i = 0; i < pts.length - 1; i++) {
-      final p0 = pts[i];
-      final p1 = pts[i + 1];
-      final mid = Offset((p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2);
-      path.quadraticBezierTo(p0.dx, p0.dy, mid.dx, mid.dy);
-    }
-    path.lineTo(pts.last.dx, pts.last.dy);
-    return path;
+    segments.add(current);
+    return segments;
   }
 
   @override
   bool shouldRepaint(covariant _LinePainter old) =>
       old.points != points ||
       old.color != color ||
-      old.highlightFraction != highlightFraction;
+      old.highlightFraction != highlightFraction ||
+      old.maxGapMs != maxGapMs;
 }
 
 class RouteMap extends StatelessWidget {

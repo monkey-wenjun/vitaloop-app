@@ -1591,16 +1591,7 @@
     "（手动）": "(Manuell)",
     "（按成绩）": "(Basierend auf Ergebnissen)",
     "（默认）": "(Standard)",
-    "，最近一晚 [[0]] 小时": ", letzte Nacht [[0]] Stunden",
-    "华为认证 key": "Huawei-Auth-Key",
-    "手表的 HiChain 认证 key": "HiChain-Auth-Key der Uhr",
-    "请输入手表的认证 key": "Gib den Auth-Key der Uhr ein",
-    "认证 key 只能是十六进制字符": "Der Auth-Key darf nur Hexadezimalzeichen enthalten",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "Der Auth-Key sollte 64 Hexadezimalzeichen haben (32 Bytes)",
-    "64 位十六进制字符串": "64-stelliger Hexadezimalstring",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "Verwende ihn, wenn die Uhr bereits in der offiziellen App gekoppelt wurde und du dich ohne Werksreset neu authentifizieren möchtest. Nach dem Speichern die Uhr erneut verbinden.",
-    "未找到认证信息：点击可手动录入": "Kein Auth-Key gefunden: Tippen, um ihn manuell einzugeben",
-    "认证 key 已保存，重新连接手表后生效": "Auth-Key gespeichert. Verbinde die Uhr erneut, damit er wirksam wird."
+    "，最近一晚 [[0]] 小时": ", letzte Nacht [[0]] Stunden"
   },
   "en": {
     "\n上次贴道路有 [[0]] 段未命中。": "\nThe last route snap missed [[0]] segment(s).",
@@ -3338,16 +3329,7 @@
     "（手动）": " (Manual)",
     "（按成绩）": " (Based on results)",
     "（默认）": " (Default)",
-    "，最近一晚 [[0]] 小时": ", latest night [[0]] hours",
-    "华为认证 key": "Huawei auth key",
-    "手表的 HiChain 认证 key": "Watch HiChain auth key",
-    "请输入手表的认证 key": "Enter the watch auth key",
-    "认证 key 只能是十六进制字符": "The auth key may only contain hexadecimal characters",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "The auth key should be 64 hexadecimal characters (32 bytes)",
-    "64 位十六进制字符串": "64-character hexadecimal string",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "Use it when the watch was already paired in the official app and you want to re-authenticate without a factory reset. Reconnect the watch after saving.",
-    "未找到认证信息：点击可手动录入": "No auth key found: tap to enter it manually",
-    "认证 key 已保存，重新连接手表后生效": "Auth key saved. Reconnect the watch for it to take effect."
+    "，最近一晚 [[0]] 小时": ", latest night [[0]] hours"
   },
   "es": {
     "\n上次贴道路有 [[0]] 段未命中。": "El último snap de ruta perdió [[0]] segmento(s).",
@@ -4941,16 +4923,7 @@
     "（手动）": "(Manual)",
     "（按成绩）": "(Basado en resultados)",
     "（默认）": "(Predeterminado)",
-    "，最近一晚 [[0]] 小时": ", última noche [[0]] horas",
-    "华为认证 key": "Clave de autenticación de Huawei",
-    "手表的 HiChain 认证 key": "Clave de autenticación HiChain del reloj",
-    "请输入手表的认证 key": "Introduce la clave de autenticación del reloj",
-    "认证 key 只能是十六进制字符": "La clave de autenticación solo puede contener caracteres hexadecimales",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "La clave de autenticación debe tener 64 caracteres hexadecimales (32 bytes)",
-    "64 位十六进制字符串": "Cadena hexadecimal de 64 caracteres",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "Úsalo cuando el reloj ya se emparejó con la aplicación oficial y quieres volver a autenticarte sin restablecer de fábrica. Vuelve a conectar el reloj tras guardar.",
-    "未找到认证信息：点击可手动录入": "No se encontró la clave de autenticación: toca para ingresarla manualmente",
-    "认证 key 已保存，重新连接手表后生效": "Clave de autenticación guardada. Vuelve a conectar el reloj para que surta efecto."
+    "，最近一晚 [[0]] 小时": ", última noche [[0]] horas"
   },
   "fr": {
     "\n上次贴道路有 [[0]] 段未命中。": "Le dernier itinéraire a manqué [[0]] segment(s).",
@@ -6544,16 +6517,7 @@
     "（手动）": "(Manuel)",
     "（按成绩）": "(Basé sur les résultats)",
     "（默认）": "(Par défaut)",
-    "，最近一晚 [[0]] 小时": ", dernière nuit [[0]] heures",
-    "华为认证 key": "Clé d’authentification Huawei",
-    "手表的 HiChain 认证 key": "Clé d’authentification HiChain de la montre",
-    "请输入手表的认证 key": "Saisissez la clé d’authentification de la montre",
-    "认证 key 只能是十六进制字符": "La clé d’authentification ne peut contenir que des caractères hexadécimaux",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "La clé d’authentification doit comporter 64 caractères hexadécimaux (32 octets)",
-    "64 位十六进制字符串": "Chaîne hexadécimale de 64 caractères",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "À utiliser quand la montre a déjà été appairée dans l’application officielle et que vous voulez vous ré-authentifier sans réinitialisation. Reconnectez la montre après l’enregistrement.",
-    "未找到认证信息：点击可手动录入": "Aucune clé d’authentification trouvée : appuyez pour la saisir manuellement",
-    "认证 key 已保存，重新连接手表后生效": "Clé d’authentification enregistrée. Reconnectez la montre pour qu’elle prenne effet."
+    "，最近一晚 [[0]] 小时": ", dernière nuit [[0]] heures"
   },
   "ja": {
     "\n上次贴道路有 [[0]] 段未命中。": "最後のルートスナップは[[0]]セグメントを逃しました。",
@@ -8147,16 +8111,7 @@
     "（手动）": "（手動）",
     "（按成绩）": "（結果に基づく）",
     "（默认）": "（デフォルト）",
-    "，最近一晚 [[0]] 小时": "、最も遅い夜[[0]]時間",
-    "华为认证 key": "Huawei 認証キー",
-    "手表的 HiChain 认证 key": "スマートウォッチの HiChain 認証キー",
-    "请输入手表的认证 key": "スマートウォッチの認証キーを入力してください",
-    "认证 key 只能是十六进制字符": "認証キーには16進文字のみ使用できます",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "認証キーは64桁の16進文字（32バイト）である必要があります",
-    "64 位十六进制字符串": "64桁の16進文字列",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "公式アプリで既にペアリング済みで、工場出荷時リセットなしで再認証したい場合に使用します。保存後に時計を再接続してください。",
-    "未找到认证信息：点击可手动录入": "認証キーが見つかりません：タップして手動で入力",
-    "认证 key 已保存，重新连接手表后生效": "認証キーを保存しました。時計を再接続すると有効になります"
+    "，最近一晚 [[0]] 小时": "、最も遅い夜[[0]]時間"
   },
   "ru": {
     "\n上次贴道路有 [[0]] 段未命中。": "Последняя привязка маршрута пропустила сегменты [[0]].",
@@ -9750,16 +9705,7 @@
     "（手动）": "(Вручную)",
     "（按成绩）": "(По результатам)",
     "（默认）": "(По умолчанию)",
-    "，最近一晚 [[0]] 小时": ", последняя ночь [[0]] ч.",
-    "华为认证 key": "Ключ аутентификации Huawei",
-    "手表的 HiChain 认证 key": "Ключ аутентификации HiChain часов",
-    "请输入手表的认证 key": "Введите ключ аутентификации часов",
-    "认证 key 只能是十六进制字符": "Ключ аутентификации может содержать только шестнадцатеричные символы",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "Ключ аутентификации должен содержать 64 шестнадцатеричных символа (32 байта)",
-    "64 位十六进制字符串": "Шестнадцатеричная строка из 64 символов",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "Используйте, если часы уже сопряжены с официальным приложением и нужно пройти аутентификацию без сброса к заводским настройкам. После сохранения переподключите часы.",
-    "未找到认证信息：点击可手动录入": "Ключ аутентификации не найден: нажмите, чтобы ввести вручную",
-    "认证 key 已保存，重新连接手表后生效": "Ключ аутентификации сохранён. Переподключите часы, чтобы он применился."
+    "，最近一晚 [[0]] 小时": ", последняя ночь [[0]] ч."
   },
   "th": {
     "\n上次贴道路有 [[0]] 段未命中。": "สแน็ปเส้นทางล่าสุดพลาดเซกเมนต์ [[0]]",
@@ -11353,16 +11299,7 @@
     "（手动）": "(ด้วยตนเอง)",
     "（按成绩）": "(ขึ้นอยู่กับผลลัพธ์)",
     "（默认）": "(ค่าเริ่มต้น)",
-    "，最近一晚 [[0]] 小时": ", คืนล่าสุด [[0]] ชั่วโมง",
-    "华为认证 key": "คีย์ยืนยันตัวตน Huawei",
-    "手表的 HiChain 认证 key": "คีย์ HiChain ของนาฬิกา",
-    "请输入手表的认证 key": "กรอกคีย์ยืนยันตัวตนของนาฬิกา",
-    "认证 key 只能是十六进制字符": "คีย์ต้องมีเฉพาะอักขระฐานสิบหก",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "คีย์ต้องเป็นอักขระฐานสิบหก 64 ตัว (32 ไบต์)",
-    "64 位十六进制字符串": "สตริงฐานสิบหก 64 อักขระ",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "ใช้เมื่อจับคู่นาฬิกากับแอปทางการมาแล้วและต้องการยืนยันตัวตนใหม่โดยไม่ต้องรีเซ็ตเป็นค่าจากโรงงาน บันทึกแล้วให้เชื่อมต่อใหม่อีกครั้ง",
-    "未找到认证信息：点击可手动录入": "ไม่พบคีย์ยืนยันตัวตน แตะเพื่อป้อนด้วยตนเอง",
-    "认证 key 已保存，重新连接手表后生效": "บันทึกคีย์แล้ว ให้เชื่อมต่อนาฬิกาใหม่อีกครั้งเพื่อให้มีผล"
+    "，最近一晚 [[0]] 小时": ", คืนล่าสุด [[0]] ชั่วโมง"
   },
   "vi": {
     "\n上次贴道路有 [[0]] 段未命中。": "Đoạn đường cuối cùng bị trượt [[0]].",
@@ -12956,15 +12893,6 @@
     "（手动）": "(Thủ công)",
     "（按成绩）": "(Dựa trên kết quả)",
     "（默认）": "(Mặc định)",
-    "，最近一晚 [[0]] 小时": "ơi, đêm muộn nhất [[0]] giờ",
-    "华为认证 key": "Khóa xác thực Huawei",
-    "手表的 HiChain 认证 key": "Khóa HiChain của đồng hồ",
-    "请输入手表的认证 key": "Nhập khóa xác thực của đồng hồ",
-    "认证 key 只能是十六进制字符": "Khóa xác thực chỉ được chứa ký thập lục phân",
-    "认证 key 应为 64 个十六进制字符（32 字节）": "Khóa xác thực phải gồm 64 ký thập lục phân (32 byte)",
-    "64 位十六进制字符串": "Chuỗi thập lục phân 64 ký tự",
-    "用于手表已在官方 App 配对过、需要免恢复出厂重新认证的场景；保存后请重新连接手表。": "Dùng khi đồng hồ đã ghép nối với ứng dụng chính thức và bạn muốn xác thực lại mà không cần khôi phục cài đặt gốc. Lưu xong hãy kết nối lại đồng hồ.",
-    "未找到认证信息：点击可手动录入": "Không tìm thấy khóa xác thực: chạm để nhập thủ công",
-    "认证 key 已保存，重新连接手表后生效": "Đã lưu khóa xác thực. Kết nối lại đồng hồ để áp dụng."
+    "，最近一晚 [[0]] 小时": "ơi, đêm muộn nhất [[0]] giờ"
   }
 }

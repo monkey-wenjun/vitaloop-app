@@ -3946,14 +3946,6 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         if (url.isNotBlank()) refreshEphemerisIfConfigured()
     }
 
-    /** 手动录入的 HiChain 认证 key（32 字节 hex）：协议栈按设备 MAC 读 prefs，
-     *  地址由 Dart 侧传入；Rust 记录的同步也走回 Dart，Kotlin 不直接碰 frb API。 */
-    fun saveAuthKey(address: String, authKey: String) {
-        if (address.isEmpty()) return
-        GBApplication.getDeviceSpecificSharedPrefs(address)
-            .edit().putString("authkey", authKey).apply()
-    }
-
     /** 星历状态：本地文件新旧、手表最近一次协商、下载进度，供详情页展示 */
     fun ephemerisStatus(): JSONObject {
         val info = HuaweiEphemerisUpdater.getFileInfo(appContext)

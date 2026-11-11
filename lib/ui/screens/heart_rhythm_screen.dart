@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' hide Text;
 import 'package:vitaloop/l10n/localized_text.dart';
 
@@ -20,6 +22,7 @@ class HeartRhythmScreen extends StatefulWidget {
 
 class _HeartRhythmScreenState extends State<HeartRhythmScreen> {
   bool _showAllRecords = false;
+  int? _timelineIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -129,24 +132,7 @@ class _HeartRhythmScreenState extends State<HeartRhythmScreen> {
                     ),
                     const SizedBox(height: 12),
                     if (timeline.length >= 2)
-                      HeartRateCurve(
-                        points: [
-                          for (final e in timeline)
-                            Offset(
-                              e.timestampMs.toDouble(),
-                              _severity(e.resultType.toInt()).toDouble(),
-                            ),
-                        ],
-                        height: 96,
-                        color: v.heartInk,
-                        valueFormat: (value) => _severityLabel(value.round()),
-                        xLabel: (value) {
-                          final d = DateTime.fromMillisecondsSinceEpoch(
-                            value.round(),
-                          );
-                          return '${d.month}/${d.day} ${clock(d)}';
-                        },
-                      )
+                      _timeline(v, timeline)
                     else
                       Text(
                         '再完成一次筛查后即可画出趋势。',
@@ -160,14 +146,6 @@ class _HeartRhythmScreenState extends State<HeartRhythmScreen> {
                         _legend(v.warnInk, '需关注'),
                         const SizedBox(width: 12),
                         _legend(v.danger, '疑似房颤'),
-                        const Spacer(),
-                        Text(
-                          '点按曲线可查看日期和结果',
-                          style: VText.label.copyWith(
-                            fontSize: 9.5,
-                            color: v.muted,
-                          ),
-                        ),
                       ],
                     ),
                   ],
@@ -238,6 +216,91 @@ class _HeartRhythmScreenState extends State<HeartRhythmScreen> {
     );
   }
 
+  /// 筛查结果是「正常 / 需关注 / 疑似房颤」三档分类，不是连续数值。
+  /// 以前用折线把 1→2→3 连起来，等于凭空造出「逐渐恶化」的斜线和拐弯；
+  /// 改成每场筛查一个圆点，只表达发生时间与结果档位。
+  Widget _timeline(VColors v, List<ArrhythmiaEntry> timeline) {
+    final selected = _timelineIndex != null && _timelineIndex! < timeline.length
+        ? timeline[_timelineIndex!]
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 140),
+          child: selected == null
+              ? Text(
+                  '点按圆点查看日期和结果',
+                  key: const ValueKey('hint'),
+                  style: VText.label.copyWith(fontSize: 9.5, color: v.muted),
+                )
+              : Text(
+                  '${relativeDay(DateTime.fromMillisecondsSinceEpoch(selected.timestampMs))} '
+                  '${clock(DateTime.fromMillisecondsSinceEpoch(selected.timestampMs))} · '
+                  '${arrhythmiaLabel(selected.resultType.toInt())}',
+                  key: ValueKey(selected.timestampMs),
+                  style: VText.label.copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _ink(v, selected.resultType.toInt()),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 96,
+          width: double.infinity,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) =>
+                    _selectTimeline(d.localPosition.dx, width, timeline),
+                onHorizontalDragStart: (d) =>
+                    _selectTimeline(d.localPosition.dx, width, timeline),
+                onHorizontalDragUpdate: (d) =>
+                    _selectTimeline(d.localPosition.dx, width, timeline),
+                child: CustomPaint(
+                  painter: _RhythmTimelinePainter(
+                    timeline: timeline,
+                    grid: v.line,
+                    selectedIndex: _timelineIndex,
+                    colorFor: (type) => _ink(v, type),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _selectTimeline(
+    double dx,
+    double width,
+    List<ArrhythmiaEntry> timeline,
+  ) {
+    if (timeline.isEmpty) return;
+    const padX = 10.0;
+    final usable = math.max(1.0, width - padX * 2);
+    final fraction = ((dx - padX) / usable).clamp(0.0, 1.0);
+    final first = timeline.first.timestampMs.toDouble();
+    final span = math.max(1.0, timeline.last.timestampMs.toDouble() - first);
+    var best = 0;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < timeline.length; i++) {
+      final ratio = (timeline[i].timestampMs.toDouble() - first) / span;
+      final distance = (ratio - fraction).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+      }
+    }
+    if (_timelineIndex != best) setState(() => _timelineIndex = best);
+  }
+
   Widget _row(ArrhythmiaEntry e, VColors v) => VRowItem(
     icon: e.resultType == 1
         ? Icons.check_circle_rounded
@@ -265,18 +328,6 @@ class _HeartRhythmScreenState extends State<HeartRhythmScreen> {
       Text(label, style: VText.label.copyWith(fontSize: 9.5)),
     ],
   );
-
-  int _severity(int type) => switch (type) {
-    2 || 5 => 2,
-    3 || 4 => 3,
-    _ => 1,
-  };
-
-  String _severityLabel(int severity) => switch (severity) {
-    2 => '需关注',
-    3 => '疑似房颤',
-    _ => '正常',
-  };
 
   Widget _bar(int type, int count, int total, VColors v) => Padding(
     padding: const EdgeInsets.only(bottom: 7),
@@ -326,4 +377,80 @@ class _HeartRhythmScreenState extends State<HeartRhythmScreen> {
     3 || 4 => v.tintHeart,
     _ => v.tintGrey,
   };
+}
+
+/// 分类结果的离散时间线：三档基线 + 每场筛查一个圆点，不做任何连线插值。
+class _RhythmTimelinePainter extends CustomPainter {
+  _RhythmTimelinePainter({
+    required this.timeline,
+    required this.grid,
+    required this.selectedIndex,
+    required this.colorFor,
+  });
+
+  final List<ArrhythmiaEntry> timeline;
+  final Color grid;
+  final int? selectedIndex;
+  final Color Function(int resultType) colorFor;
+
+  static const _padX = 10.0;
+  static const _padY = 10.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final width = math.max(1.0, size.width - _padX * 2);
+    final height = math.max(1.0, size.height - _padY * 2);
+    final bottom = _padY + height;
+
+    final lanePaint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (var severity = 1; severity <= 3; severity++) {
+      final y = _padY + (3 - severity) / 2 * height;
+      canvas.drawLine(Offset(_padX, y), Offset(_padX + width, y), lanePaint);
+    }
+
+    final first = timeline.first.timestampMs.toDouble();
+    final span = math.max(1.0, timeline.last.timestampMs.toDouble() - first);
+    for (var i = 0; i < timeline.length; i++) {
+      final entry = timeline[i];
+      final severity = _severityOf(entry.resultType.toInt());
+      final x = _padX + (entry.timestampMs.toDouble() - first) / span * width;
+      final y = _padY + (3 - severity) / 2 * height;
+      final selected = i == selectedIndex;
+      // 底线到圆点的细茎：让孤立的筛查也能读出发生在时间轴的哪个位置。
+      canvas.drawLine(
+        Offset(x, bottom),
+        Offset(x, y),
+        Paint()
+          ..color = grid.withValues(alpha: 0.8)
+          ..strokeWidth = 1,
+      );
+      final color = colorFor(entry.resultType.toInt());
+      if (selected) {
+        canvas.drawCircle(
+          Offset(x, y),
+          7,
+          Paint()..color = color.withValues(alpha: 0.18),
+        );
+      }
+      canvas.drawCircle(
+        Offset(x, y),
+        selected ? 4.6 : 3.6,
+        Paint()..color = color,
+      );
+    }
+  }
+
+  static int _severityOf(int type) => switch (type) {
+    2 || 5 => 2,
+    3 || 4 => 3,
+    _ => 1,
+  };
+
+  @override
+  bool shouldRepaint(covariant _RhythmTimelinePainter old) =>
+      old.timeline != timeline ||
+      old.grid != grid ||
+      old.selectedIndex != selectedIndex;
 }

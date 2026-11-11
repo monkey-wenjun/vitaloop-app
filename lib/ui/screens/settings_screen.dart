@@ -202,7 +202,7 @@ class SettingsScreen extends StatelessWidget {
                 iconBackground: v.tintSky,
                 iconColor: v.skyInk,
                 title: '地图与离线',
-                subtitle: '默认 PMTiles · Liberty / Dark · 当前城市离线缓存',
+                subtitle: '高德 / PMTiles 一键切换 · 当前城市离线缓存',
                 showChevron: true,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const MapSettingsScreen()),
@@ -1215,7 +1215,7 @@ class _AboutScreenState extends State<AboutScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              '不登录时：健康数据（心率、睡眠、运动记录、从旧版导入的历史）只写入本机 SQLite，不上传服务器，没有埋点与第三方分析 SDK。\n\n登录后：健康快照通过 HTTPS 上传到你配置的云端服务器账号目录，用于云备份和换机恢复；密码只保存加盐哈希。地图只向当前选择的底图服务请求查看区域瓦片；默认使用自托管友好的 Protomaps PMTiles，不含健康数据。',
+                              '不登录时：健康数据（心率、睡眠、运动记录、从旧版导入的历史）只写入本机 SQLite，不上传服务器，没有埋点与第三方分析 SDK。\n\n登录后：健康快照通过 HTTPS 上传到你配置的云端服务器账号目录，用于云备份和换机恢复；密码只保存加盐哈希。地图只向当前选择的底图服务请求查看区域瓦片；默认使用自托管的 Protomaps PMTiles，也可以一键切换到高德栅格底图，不含健康数据。',
                               style: VText.body.copyWith(color: ctx.v.ink2),
                             ),
                           ],

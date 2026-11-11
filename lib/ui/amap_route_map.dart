@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Text;
@@ -5,9 +6,12 @@ import 'package:vitaloop/l10n/ui_translations.dart';
 import 'package:vitaloop/l10n/localized_text.dart';
 
 import '../data/amap_tile_cache.dart';
+import '../data/amap_tiles.dart';
 import '../data/map_display.dart';
+import '../data/map_offline_service.dart';
 import '../theme/tokens.dart';
 import '../util/coordinate.dart';
+import '../util/map_bearing.dart';
 import 'pmtiles_route_map.dart';
 
 /// 高德栅格瓦片地图，叠加本地轨迹。
@@ -70,7 +74,7 @@ class AmapRouteMap extends StatefulWidget {
   final List<Offset> supplyPoints;
   final bool supplyPointsWgs84;
 
-  /// 实时运动时固定北向上，并把最新定位放在可见地图区域中央。
+  /// 实时运动时把最新定位放在可见地图区域中央，并让前进方向朝上。
   final bool followCurrentPoint;
 
   /// 实时轨迹的末点就是当前位置，不标成“终”。
@@ -127,6 +131,9 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
 
   double? _zoom;
   Offset? _center;
+
+  /// 前进方向（正北 0°，顺时针）。跟随模式下地图按它旋转成车头朝上。
+  double _bearing = 0;
   Size _fittedFor = Size.zero;
   int _fittedPointCount = 0;
   Offset? _fittedFirst;
@@ -154,6 +161,9 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
   void initState() {
     super.initState();
     MapDisplaySettings.instance.addListener(_onDisplaySettingsChanged);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scheduleCityDownload(),
+    );
   }
 
   @override
@@ -172,6 +182,25 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
     _fittedLast = null;
     _fittedCurrent = null;
     setState(() {});
+    _scheduleCityDownload();
+  }
+
+  /// 看到新的 GPS 位置后，自动缓存当前城市的地图。
+  ///
+  /// 只在显示底图、且开启「自动下载当前城市」时触发；按 0.5° 网格去重，
+  /// 每秒更新定位也不会反复发起下载。
+  void _scheduleCityDownload() {
+    final settings = MapDisplaySettings.instance;
+    if (!settings.showBaseMap || !settings.offlineCityEnabled) return;
+    final point = widget.currentPoint;
+    if (point == null || !point.dx.isFinite || !point.dy.isFinite) return;
+    unawaited(
+      MapOfflineService.instance.ensureCity(
+        point.dx,
+        point.dy,
+        gcj02: !(widget.currentPointWgs84 ?? widget.wgs84),
+      ),
+    );
   }
 
   @override
@@ -189,6 +218,7 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
     }
     if (oldWidget.currentPoint != widget.currentPoint) {
       _fittedCurrent = null;
+      _scheduleCityDownload();
     }
     if (!identical(oldWidget.targetPoints, widget.targetPoints) ||
         oldWidget.targetPointsWgs84 != widget.targetPointsWgs84) {
@@ -312,15 +342,39 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
             final worldSize = 256 * math.pow(2, zoom).toDouble();
             final topLeft =
                 center * worldSize - Offset(size.width / 2, size.height / 2);
-            final tiles = _visibleTiles(topLeft, size, worldSize);
+            // 跟随模式下车头朝上：屏幕上方始终是前进方向。
+            final rotateRad = widget.followCurrentPoint
+                ? -_bearing * math.pi / 180
+                : 0.0;
+            final rotated = rotateRad.abs() > 0.0001;
+            // 当前定位在屏幕上的锚点；跟随时相机就是把它放在可用区域中心的。
+            final anchor = _availableCenter(size);
+            // 旋转后的画布要盖住离锚点最远的屏幕角，转任意角度都不会露出底色。
+            var radius = 0.0;
+            for (final corner in [
+              Offset.zero,
+              Offset(size.width, 0),
+              Offset(0, size.height),
+              Offset(size.width, size.height),
+            ]) {
+              radius = math.max(radius, (corner - anchor).distance);
+            }
+            final canvasSize = rotated ? Size(radius * 2, radius * 2) : size;
+            final canvasOrigin = rotated
+                ? anchor - Offset(radius, radius)
+                : Offset.zero;
+            // 画布左上角对应的世界坐标；瓦片和轨迹必须共用同一个原点。
+            final paintTopLeft = topLeft + canvasOrigin;
+            final tiles = _visibleTiles(paintTopLeft, canvasSize, worldSize);
             final tileZoom = zoom.round();
             final tileSize = 256 * math.pow(2, zoom - tileZoom).toDouble();
             final tileLayer = Stack(
+              clipBehavior: Clip.none,
               children: [
                 for (final tile in tiles)
                   Positioned(
-                    left: tile.dx * tileSize - topLeft.dx - 0.5,
-                    top: tile.dy * tileSize - topLeft.dy - 0.5,
+                    left: tile.dx * tileSize - paintTopLeft.dx - 0.5,
+                    top: tile.dy * tileSize - paintTopLeft.dy - 0.5,
                     width: tileSize + 1,
                     height: tileSize + 1,
                     child: Image(
@@ -342,11 +396,17 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
                   ),
               ],
             );
+            // 屏幕坐标 → 旋转前的地图坐标。地图内容绕 anchor 转，点选和手势
+            // 都必须先按反方向转回去，否则车头朝上时点哪里都偏。
+            Offset toMapLocal(Offset local) => rotated
+                ? anchor + _rotateVector(local - anchor, -rotateRad)
+                : local;
             return GestureDetector(
               onTapUp: widget.onTapPoint == null
                   ? null
                   : (details) {
-                      final world = topLeft + details.localPosition;
+                      final world =
+                          paintTopLeft + toMapLocal(details.localPosition);
                       final nx = world.dx / worldSize;
                       final ny = world.dy / worldSize;
                       final t = math.pi * (1 - 2 * ny);
@@ -372,8 +432,15 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
                 final startWorld = 256 * math.pow(2, _startZoom).toDouble();
                 final newWorld = 256 * math.pow(2, newZoom).toDouble();
                 // 手势开始时焦点下的归一化世界坐标，缩放/拖动后仍要跟住当前手指位置。
-                final startOffset = _startFocal - viewCenter;
-                final focalOffset = focal - viewCenter;
+                // 地图旋转后，屏幕位移要先转回地图坐标再参与相机计算。
+                final startOffset = _rotateVector(
+                  _startFocal - viewCenter,
+                  -rotateRad,
+                );
+                final focalOffset = _rotateVector(
+                  focal - viewCenter,
+                  -rotateRad,
+                );
                 final moved =
                     _startCenter +
                     Offset(
@@ -399,7 +466,10 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
                 final newZoom = (zoom + 1).clamp(_minZoom, _maxZoom);
                 final startWorld = 256 * math.pow(2, zoom).toDouble();
                 final newWorld = 256 * math.pow(2, newZoom).toDouble();
-                final focalOffset = focal - viewCenter;
+                final focalOffset = _rotateVector(
+                  focal - viewCenter,
+                  -rotateRad,
+                );
                 final moved =
                     center +
                     Offset(
@@ -419,36 +489,56 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
               child: Stack(
                 children: [
                   Positioned.fill(child: ColoredBox(color: v.mapThumb)),
-                  if (MapDisplaySettings.instance.showBaseMap)
-                    Positioned.fill(
-                      child: v.isDark
-                          ? ColorFiltered(
-                              colorFilter: _nightMapFilter,
-                              child: tileLayer,
-                            )
-                          : tileLayer,
-                    ),
-                  if (!v.isDark)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: ColoredBox(color: const Color(0x1276C893)),
-                      ),
-                    ),
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _RoutePainter(
-                        geometry: geometry,
-                        targetGeometry: targetGeometry,
-                        supplyPoints: _displaySupplyPoints,
-                        topLeft: topLeft,
-                        worldSize: worldSize,
-                        currentPoint: currentPoint,
-                        routeColor: const Color(0xFFFF8A3D),
-                        targetColor: widget.targetColor,
-                        casingColor: Colors.white,
-                        startColor: const Color(0xFF2EAD62),
-                        endColor: v.danger,
-                        showEndpoints: widget.showEndpoints,
+                  // 地图内容整体绕定位锚点旋转。画布扩大到对角线后，
+                  // 旋转只会露出画布内的内容，不会露出页面底色。
+                  Positioned(
+                    left: canvasOrigin.dx,
+                    top: canvasOrigin.dy,
+                    width: canvasSize.width,
+                    height: canvasSize.height,
+                    child: Transform.rotate(
+                      key: const ValueKey('amap-rotate'),
+                      angle: rotateRad,
+                      alignment: Alignment.center,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          if (MapDisplaySettings.instance.showBaseMap)
+                            Positioned.fill(
+                              child: v.isDark
+                                  ? ColorFiltered(
+                                      colorFilter: _nightMapFilter,
+                                      child: tileLayer,
+                                    )
+                                  : tileLayer,
+                            ),
+                          if (!v.isDark)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: ColoredBox(
+                                  color: const Color(0x1276C893),
+                                ),
+                              ),
+                            ),
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _RoutePainter(
+                                geometry: geometry,
+                                targetGeometry: targetGeometry,
+                                supplyPoints: _displaySupplyPoints,
+                                topLeft: paintTopLeft,
+                                worldSize: worldSize,
+                                currentPoint: currentPoint,
+                                routeColor: const Color(0xFFFF8A3D),
+                                targetColor: widget.targetColor,
+                                casingColor: Colors.white,
+                                startColor: const Color(0xFF2EAD62),
+                                endColor: v.danger,
+                                showEndpoints: widget.showEndpoints,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -631,6 +721,10 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
     final availCenter = _availableCenter(size);
     if (widget.followCurrentPoint && current != null) {
       _zoom = _followZoom;
+      // 车头朝上：用最近一段轨迹估方向。位移太小（等红灯/GPS 漂移）时
+      // 保持上一次方向，避免地图原地打转。
+      final heading = travelBearingDegrees(valid);
+      if (heading != null) _bearing = blendBearingDegrees(_bearing, heading);
       final world = 256 * math.pow(2, _zoom!).toDouble();
       final projected = _project(current.dx, current.dy);
       _center = Offset(
@@ -749,12 +843,8 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
     return out;
   }
 
-  String _tileUrl(int x, int y, int z) {
-    final server = (x + y) % 4 + 1;
-    // ltype=11 是高德的无路名底图；0/缺省是带街道名称的完整底图。
-    final ltype = MapDisplaySettings.instance.showLabels ? 0 : 11;
-    return 'https://webrd0$server.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=$ltype&x=$x&y=$y&z=$z';
-  }
+  String _tileUrl(int x, int y, int z) =>
+      amapTileUrl(x, y, z, labels: MapDisplaySettings.instance.showLabels);
 
   Future<void> _showMapOptions(BuildContext context) async {
     final settings = MapDisplaySettings.instance;
@@ -796,6 +886,17 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
           ),
         ),
       ),
+    );
+  }
+
+  /// 把屏幕向量按 [angle] 旋转；用于旋转地图后的点选/手势坐标换算。
+  static Offset _rotateVector(Offset vector, double angle) {
+    if (angle == 0) return vector;
+    final cos = math.cos(angle);
+    final sin = math.sin(angle);
+    return Offset(
+      vector.dx * cos - vector.dy * sin,
+      vector.dx * sin + vector.dy * cos,
     );
   }
 
