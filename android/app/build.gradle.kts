@@ -65,6 +65,6 @@ dependencies {
     implementation("org.slf4j:slf4j-android:1.7.36")
     implementation("com.google.code.gson:gson:2.15.0")
     // GPS 星历下载：需要自定义 Dns（系统解析在移动网络要 10 秒，DoH 竞速 0.4 秒）
-    implementation("com.squareup.okhttp3:okhttp:4.11.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
     testImplementation("junit:junit:4.13.2")
 }
