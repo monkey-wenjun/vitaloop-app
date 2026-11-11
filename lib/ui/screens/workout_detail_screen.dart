@@ -2063,7 +2063,15 @@ class _WorkoutView {
       hr: hr,
       hrFull: hrFull,
       speed: speed,
-      altitude: altitude,
+      // 海拔采样可能跟 GPS 一样密（一次骑行几千个点），全部画出来既卡又全是
+      // 高频抖动的小拐弯；展示抽稀到 180 个点，爬升/下降仍用全量算好的值。
+      altitude: _Altitude(
+        points: _downsample(altitude.points, 180),
+        gain: altitude.gain,
+        loss: altitude.loss,
+        max: altitude.max,
+        min: altitude.min,
+      ),
       cadence: _downsample(dynamics.cadence, 160),
       power: _downsample(dynamics.power, 160),
       dynamicExtras: [

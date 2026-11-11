@@ -10,7 +10,7 @@ use crate::readiness;
 
 static DB: OnceLock<Mutex<Option<Connection>>> = OnceLock::new();
 
-pub const DB_VERSION: i64 = 11;
+pub const DB_VERSION: i64 = 12;
 
 fn cell() -> &'static Mutex<Option<Connection>> {
     DB.get_or_init(|| Mutex::new(None))
@@ -664,6 +664,11 @@ CREATE TABLE IF NOT EXISTS sync_changelog(
     if previous_version < 11 {
         // v11 保存手表 TruSleep 的整段睡眠锚点。用它作为最终总时长，
         // 避免分钟分期四舍五入造成 6h18 在 App 里变成 6h20。
+        crate::watch::rebuild_sleep_sessions(conn)?;
+    }
+    if previous_version < 12 {
+        // v11 的重建会跳过「分期字段没变」的会话，导致 anchor_min 一直是 NULL。
+        // v12 把锚点纳入变更比较后重跑一次，把已存在的会话补齐。
         crate::watch::rebuild_sleep_sessions(conn)?;
     }
     backfill_sleep_stage_minutes(conn)?;
@@ -1694,7 +1699,11 @@ fn watch_sleep_correction(
              FROM sleep_bed
              WHERE COALESCE(fall_asleep_ms, bed_ms, session_start_ms)
                    BETWEEN ?1 - 3600000 AND ?2
-             ORDER BY ABS(COALESCE(fall_asleep_ms, bed_ms, session_start_ms) - ?1)
+             ORDER BY ABS(COALESCE(fall_asleep_ms, bed_ms, session_start_ms) - ?1),
+                      (watch_score IS NULL),
+                      (watch_efficiency IS NULL),
+                      (wake_ms IS NULL),
+                      session_start_ms DESC
              LIMIT 1",
             params![session.start_ms, session.end_ms],
             |r| {
@@ -3035,8 +3044,10 @@ pub fn metric_detail(metric: &str, days: i64) -> Result<MetricDetail> {
         // 首页心率卡显示「最新一次采样」，详情页大数字必须用同一条数据；
         // 日均值只用于趋势图。先记下抽稀前的最新采样，避免两处差出十几 bpm。
         let latest_sample = samples.last().map(|s| (s.timestamp_ms, s.value));
-        if samples.len() > 360 {
-            let step = samples.len() / 360 + 1;
+        // 36 小时窗口按 1 分钟一个点算是 2160 点，上限给到这个数就不再抽稀，
+        // 手表分钟级心率能原样画出；更多（高频运动采样）才按步长压回 ~2160 点。
+        if samples.len() > 2160 {
+            let step = samples.len() / 2160 + 1;
             samples = samples.into_iter().step_by(step).collect();
         }
 

@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Reject private awen.me domains
+        run: ./scripts/check-domains.sh --all
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

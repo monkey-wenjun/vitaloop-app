@@ -25,12 +25,15 @@ class MapDisplaySettings extends ChangeNotifier {
   bool showBaseMap = true;
   bool showLabels = true;
   int markerIntervalM = 1000;
+
+  /// 默认走自托管 PMTiles；用户可以在设置里切到高德。
   MapBaseProvider provider = MapBaseProvider.pmtiles;
   String pmtilesUrl = defaultPmtilesUrl;
   bool offlineCityEnabled = false;
   bool _loaded = false;
   bool _defaultsLoaded = false;
 
+  /// 公共构建不内置任何私有域名；由用户在设置里填写或构建时注入。
   static const defaultPmtilesUrl = '';
 
   Future<void> load() async {
@@ -54,6 +57,7 @@ class MapDisplaySettings extends ChangeNotifier {
         (item) => item.name == providerName,
         orElse: () => MapBaseProvider.pmtiles,
       );
+      // 只做默认值：用户已经在设置里选过底图时，不能被默认值覆盖。
       pmtilesUrl = await VitaloopApi.setting('map_pmtiles_url', pmtilesUrl);
       offlineCityEnabled =
           await VitaloopApi.setting(

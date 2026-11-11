@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'api.dart';
+import 'blog_hr.dart';
 import '../src/rust/api/types.dart';
 import '../state/app_state.dart';
 
@@ -200,6 +201,7 @@ class WatchBridge {
   final workoutRealtimeStatus = ValueNotifier<Map<String, dynamic>>(const {});
   List<Map<String, dynamic>> _buffer = [];
   Timer? _flushTimer;
+  final Map<String, int> _blogPushCursors = {};
   // ignore: unused_field
   StreamSubscription? _sub;
   bool _listening = false;
@@ -304,9 +306,116 @@ class WatchBridge {
       await VitaloopApi.ingestWatchData(
         eventsJson: jsonEncode({'events': batch}),
       );
+      unawaited(_pushMetricsToBlog(batch));
       await _appState?.refresh();
     } catch (_) {
       // 入库失败丢批：下一轮 1 分钟增量同步会补回数据
+    }
+  }
+
+  /// 手表同步来的健康指标顺带推给 blogapi：博客马拉松页各卡片/曲线读的
+  /// 是 blogapi 的 realtime_* 表，老 heart_sync App 停推后只能靠这里续上。
+  /// 每个指标独立游标只前进，重同步回放的旧事件不会重复刷接口。
+  static const _blogMetricPaths = {
+    'hr': 'heart-rate/realtime',
+    'spo2': 'spo2/realtime',
+    'resting_hr': 'resting-heart-rate/realtime',
+    'hrv': 'hrv/realtime',
+    'respiration': 'respiratory-rate/realtime',
+    'stress': 'stress/realtime',
+    'skin_temp': 'temperature/realtime',
+    'emotion': 'emotion/realtime',
+    'arrhythmia': 'arrhythmia/realtime',
+    'apnea': 'apnea/realtime',
+  };
+
+  static Map<String, dynamic>? _blogPayload(String t, Map<String, dynamic> ev) {
+    num? v(String k) => ev[k] as num?;
+    final base = <String, dynamic>{'source': 'vitaloop'};
+    switch (t) {
+      case 'hr':
+        return {...base, 'heart_rate': v('bpm')};
+      case 'spo2':
+        return {...base, 'spo2': v('v')};
+      case 'resting_hr':
+      case 'respiration':
+        return {...base, 'value': v('v')};
+      case 'hrv':
+        return {...base, 'rmssd': v('v')};
+      case 'stress':
+        return {...base, 'score': v('v')};
+      case 'skin_temp':
+        return {...base, 'value': v('v')};
+      case 'emotion':
+        return {
+          ...base,
+          'status': v('status'),
+          'valence': v('valence'),
+          'arousal': v('arousal'),
+        };
+      case 'arrhythmia':
+        return {
+          ...base,
+          'result_type': v('result'),
+          'measure_type': v('measure_type'),
+        };
+      case 'apnea':
+        return {...base, 'level': v('level')};
+    }
+    return null;
+  }
+
+  Future<void> _pushMetricsToBlog(List<Map<String, dynamic>> batch) async {
+    if (!BlogHrApi.enabled) return;
+    final defaultCursor =
+        DateTime.now().millisecondsSinceEpoch - 3 * 86400000;
+    for (final entry in _blogMetricPaths.entries) {
+      final t = entry.key;
+      try {
+        var cursor = _blogPushCursors[t];
+        if (cursor == null) {
+          final saved = await VitaloopApi.setting(
+            'blog_push_last_ts_$t',
+            '',
+          );
+          // 首次启用只回补最近 3 天，够博客 24h/7d 图用，也避免装机时打满接口
+          cursor = int.tryParse(saved) ?? defaultCursor;
+          _blogPushCursors[t] = cursor;
+        }
+        final points =
+            [
+                  for (final ev in batch)
+                    if (ev['t'] == t)
+                      (
+                        tsMs: (ev['ts'] as num?)?.toInt() ?? 0,
+                        payload: _blogPayload(t, ev),
+                      ),
+                ]
+                .where(
+                  (p) =>
+                      p.tsMs > cursor! &&
+                      p.payload != null &&
+                      // 数值字段（除 source/timestamp 外）至少一个非 null；
+                      // 手表侧已对 hr/spo2/resting_hr 过滤 0 值
+                      p.payload!.entries.any(
+                        (x) => x.key != 'source' && x.value is num,
+                      ),
+                )
+                .map(
+                  (p) => (
+                    tsMs: p.tsMs,
+                    body: {...p.payload!, 'timestamp': p.tsMs},
+                  ),
+                )
+                .toList()
+              ..sort((a, b) => a.tsMs.compareTo(b.tsMs));
+        if (points.isEmpty) continue;
+        final newTs = await BlogHrApi.pushMetric(entry.value, points);
+        if (newTs != null && newTs > cursor) {
+          _blogPushCursors[t] = newTs;
+          await VitaloopApi.setSetting('blog_push_last_ts_$t', '$newTs');
+        }
+      } catch (_) {}
     }
   }
 
@@ -864,36 +973,6 @@ class WatchBridge {
     } catch (_) {}
     try {
       await _method.invokeMethod('set_ephemeris_url', {'url': url.trim()});
-    } catch (_) {}
-  }
-
-  /// 手动录入的 HiChain 认证 key：Rust 记录供 autoConnect，原生 prefs 是协议栈
-  /// 真正读取的地方；地址用当前身份（或配对时写入的），两边必须一致。
-  Future<void> saveAuthKey(String authKey) async {
-    var address = '';
-    try {
-      final id = await VitaloopApi.watchIdentity();
-      address = id.address;
-      await VitaloopApi.saveWatchIdentity(
-        WatchIdentity(
-          address: id.address,
-          name: id.name,
-          account: id.account,
-          authKey: authKey,
-          fakeAndroidId: id.fakeAndroidId,
-          huaweiAddress: id.huaweiAddress,
-          lastSyncMs: id.lastSyncMs,
-          migrated: id.migrated,
-          ephemerisUrl: id.ephemerisUrl,
-        ),
-      );
-    } catch (_) {}
-    if (address.isEmpty) return;
-    try {
-      await _method.invokeMethod('save_auth_key', {
-        'mac': address,
-        'auth_key': authKey,
-      });
     } catch (_) {}
   }
 

@@ -225,7 +225,7 @@ void main() {
     expect(_tileImages(tester), 0);
   });
 
-  testWidgets('实时跟随固定北向上，轨迹增长后相机不缩小也不来回抖', (tester) async {
+  testWidgets('实时跟随时车头朝上，轨迹增长后相机不缩小也不来回抖', (tester) async {
     final points = [
       const Offset(31.2300, 121.4700),
       const Offset(31.2305, 121.4705),
@@ -245,6 +245,11 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(_tileZooms(tester).reduce(math.max), 16);
+    // 东北方向前进：整张地图要旋转，不能还是北向上。
+    final rotate = tester.widget<Transform>(
+      find.byKey(const ValueKey('amap-rotate')),
+    );
+    expect(rotate.transform.storage[1].abs(), greaterThan(0.01));
     final settled = _tileImages(tester);
     await tester.pump(const Duration(seconds: 1));
     expect(_tileImages(tester), settled);

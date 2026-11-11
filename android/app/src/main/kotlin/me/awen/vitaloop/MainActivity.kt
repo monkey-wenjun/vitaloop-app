@@ -296,13 +296,6 @@ class MainActivity : FlutterActivity() {
                     manager.setEphemerisUrl(call.argument<String>("url") ?: "")
                     result.success(null)
                 }
-                "save_auth_key" -> {
-                    manager.saveAuthKey(
-                        call.argument<String>("mac") ?: "",
-                        call.argument<String>("auth_key") ?: "",
-                    )
-                    result.success(null)
-                }
                 "ephemeris_status" -> result.success(manager.ephemerisStatus().toString())
                 "ensure_ephemeris" -> {
                     manager.ensureEphemerisDownloaded()

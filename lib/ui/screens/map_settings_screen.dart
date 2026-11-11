@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart' hide Text;
-import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:vitaloop/l10n/localized_text.dart';
 
 import '../../data/gps_bridge.dart';
@@ -59,7 +58,11 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
     }
     setState(() => _downloading = true);
     try {
-      await MapOfflineService.instance.ensureCity(ml.LatLng(fix.lat, fix.lon));
+      await MapOfflineService.instance.ensureCity(
+        fix.lat,
+        fix.lon,
+        force: true,
+      );
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
@@ -153,7 +156,7 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
                       iconBackground: v.tintGreen,
                       iconColor: v.greenInk,
                       title: '自动下载当前城市',
-                      subtitle: '首次看到 GPS 位置后，下载当前位置约 40 公里范围、缩放 10–15 的瓦片',
+                      subtitle: '首次看到 GPS 位置后，缓存当前位置约 49 公里范围、缩放 10–15 的地图',
                       trailing: Switch(
                         value: settings.offlineCityEnabled,
                         activeThumbColor: v.blue,
@@ -163,6 +166,8 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
                     ValueListenableBuilder<CityMapDownloadState>(
                       valueListenable: MapOfflineService.instance.state,
                       builder: (context, state, _) {
+                        final busy =
+                            _downloading || (state.active && !state.complete);
                         return VRowItem(
                           icon: state.complete
                               ? Icons.offline_pin_rounded
@@ -172,11 +177,16 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
                               : v.tintBlue,
                           iconColor: state.complete ? v.greenInk : v.blueInk,
                           title: state.message.isEmpty ? '离线状态' : state.message,
-                          subtitle: state.active && !state.complete
-                              ? '${(state.progress * 100).round()}%'
-                              : '只在默认 PMTiles 底图下生效',
-                          value: _downloading ? '下载中' : '立即下载',
-                          onTap: _downloading ? null : _downloadCity,
+                          subtitle: busy && state.progress > 0
+                              ? '${(state.progress * 100).round()}% · ${settings.provider.label}'
+                              : switch (settings.provider) {
+                                  MapBaseProvider.amap => '缓存当前城市高德瓦片，离线也能看到街道',
+                                  MapBaseProvider.pmtiles =>
+                                    'PMTiles 底图按离线区域缓存当前城市',
+                                  _ => '当前底图使用 OpenStreetMap 数据',
+                                },
+                          value: busy ? '下载中' : '立即下载',
+                          onTap: busy ? null : _downloadCity,
                         );
                       },
                     ),
@@ -193,8 +203,8 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
   Widget _providerCard(VColors v, MapBaseProvider provider) {
     final selected = settings.provider == provider;
     final description = switch (provider) {
-      MapBaseProvider.pmtiles => '默认。自托管矢量地图，支持城市离线缓存。',
-      MapBaseProvider.amap => '沿用现有高德 GCJ-02 栅格底图。',
+      MapBaseProvider.amap => '高德 GCJ-02 栅格底图，支持当前城市离线缓存。',
+      MapBaseProvider.pmtiles => '默认。自托管矢量地图，支持城市离线区域缓存。',
       MapBaseProvider.tencent => '需要配置腾讯地图官方 SDK Key；当前显示轨迹叠加。',
       MapBaseProvider.baidu => '需要配置百度地图官方 SDK Key；BD-09 坐标单独适配。',
     };

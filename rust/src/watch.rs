@@ -1209,11 +1209,13 @@ pub(crate) fn rebuild_sleep_sessions(conn: &Connection) -> Result<()> {
     // 手表每分钟都会重发整段睡眠分期。先和现有会话逐字段比一遍，
     // 只写真正变化的行；否则每次同步都会 DELETE+INSERT 上百行，
     // 既放大 SQLite 写入，也会让云端增量里全是重复数据。
-    let mut existing: std::collections::HashMap<(i64, String), (i64, f64, f64, f64, f64)> =
-        std::collections::HashMap::new();
+    let mut existing: std::collections::HashMap<
+        (i64, String),
+        (i64, f64, f64, f64, f64, Option<i64>),
+    > = std::collections::HashMap::new();
     {
         let mut stmt = conn.prepare(
-            "SELECT start_ms, source, end_ms, deep_min, light_min, rem_min, awake_min
+            "SELECT start_ms, source, end_ms, deep_min, light_min, rem_min, awake_min, anchor_min
              FROM sleep_sessions",
         )?;
         let rows = stmt.query_map([], |r| {
@@ -1225,6 +1227,7 @@ pub(crate) fn rebuild_sleep_sessions(conn: &Connection) -> Result<()> {
                     r.get::<_, f64>(4)?,
                     r.get::<_, f64>(5)?,
                     r.get::<_, f64>(6)?,
+                    r.get::<_, Option<i64>>(7)?,
                 ),
             ))
         })?;
@@ -1241,15 +1244,23 @@ pub(crate) fn rebuild_sleep_sessions(conn: &Connection) -> Result<()> {
             s.light as f64,
             s.rem as f64,
             s.awake as f64,
+            (s.sleep > 0).then_some(s.sleep),
         );
         if existing
             .get(&(s.start, "watch".to_string()))
             .is_some_and(|old| {
+                // 锚点只在有值时才覆盖，旧行缺锚点也要算变化，否则 v11 迁移
+                // 与日常同步永远补不上 anchor_min。
+                let anchor_same = match next.5 {
+                    Some(anchor) => old.5 == Some(anchor),
+                    None => true,
+                };
                 old.0 == next.0
                     && (old.1 - next.1).abs() < 1e-9
                     && (old.2 - next.2).abs() < 1e-9
                     && (old.3 - next.3).abs() < 1e-9
                     && (old.4 - next.4).abs() < 1e-9
+                    && anchor_same
             })
         {
             existing.remove(&(s.start, "watch".to_string()));
@@ -2026,6 +2037,48 @@ mod tests {
             )?;
             assert_eq!(count, 2, "夜间睡眠和午睡应各保留一场");
             assert!((total - 437.0).abs() < 1.0, "daily total {total}");
+            Ok(())
+        })
+        .unwrap();
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn rebuild_sleep_sessions_backfills_missing_anchor() {
+        let _guard = store::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path = std::env::temp_dir().join(format!(
+            "vitaloop-watch-sleep-anchor-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        store::open(path.to_str().unwrap()).unwrap();
+
+        let day_start = Local
+            .with_ymd_and_hms(2026, 11, 7, 0, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        let night = day_start - 3_600;
+        let events = json!({
+            "events": [
+                {"t": "sleep_segment", "start": night, "end": night + 7_200, "stage": "light"},
+                {"t": "sleep_segment", "start": night + 7_200, "end": night + 10_800, "stage": "deep"},
+                {"t": "sleep_segment", "start": night + 10_800, "end": night + 12_600, "stage": "rem"},
+                {"t": "sleep_segment", "start": night, "end": night + 12_600, "stage": "sleep"}
+            ]
+        });
+        ingest_watch_data(events.to_string()).unwrap();
+
+        store::with_conn(|conn| {
+            // 模拟 v11 之前落库的会话：分期字段齐全，锚点是空的。
+            conn.execute("UPDATE sleep_sessions SET anchor_min = NULL", [])?;
+            rebuild_sleep_sessions(conn)?;
+            let anchor: Option<i64> =
+                conn.query_row("SELECT anchor_min FROM sleep_sessions LIMIT 1", [], |r| {
+                    r.get(0)
+                })?;
+            assert_eq!(anchor, Some(210), "分期没变时也要补齐睡眠锚点");
             Ok(())
         })
         .unwrap();

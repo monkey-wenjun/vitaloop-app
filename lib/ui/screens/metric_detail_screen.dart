@@ -47,6 +47,9 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
     'active_minutes',
     'exercise_minutes',
   };
+  // 这些指标天然是「每天/每周的累计值」：步数、热量、距离、活动时长和睡眠
+  // 时长都是一段窗口的汇总，用折线会伪装成连续变化，柱形更符合直觉。
+  static const _barMetrics = {..._sumMetrics, 'sleep', 'deep_sleep'};
   // 最大摄氧量按次估算，日粒度只会看到单次跑步的波动；至少按月才有参考价值。
   static const _vo2RangeLabels = ['周', '月', '半年', '年'];
   static const _vo2RangeDays = [7, 30, 182, 365];
@@ -1735,7 +1738,9 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
     final v = context.v;
     if (_isCategorical(detail)) return _emotionSection(detail);
     if (detail.metric == 'vo2max') return _vo2MonthlySection(detail, accent);
-    if (_range == 0) {
+    // 步数/热量/睡眠这类「窗口累计值」即使切到「日」也不该画折线：
+    // 采样是 0 或整天的汇总值，连成线只会让人误以为中间连续变化。
+    if (_range == 0 && !_barMetrics.contains(detail.metric)) {
       final startMs = _rangeStart.millisecondsSinceEpoch;
       final endMs = DateTime(
         _rangeStart.year,
@@ -1747,7 +1752,8 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
               .where((s) => s.timestampMs >= startMs && s.timestampMs < endMs)
               .toList()
             ..sort((a, b) => a.timestampMs.compareTo(b.timestampMs));
-      if (samples.length < 2) return const [];
+      final points = _intradayPoints(detail.metric, samples);
+      if (points.length < 2) return const [];
       return [
         const SizedBox(height: 10),
         VCard(
@@ -1759,21 +1765,22 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                   Text('今日采样', style: VText.h3.copyWith(color: v.ink)),
                   const Spacer(),
                   Text(
-                    '${samples.length} 个采样',
+                    detail.metric == 'heart_rate'
+                        ? '10 分钟均值 · ${points.length} 个点'
+                        : '${samples.length} 个采样',
                     style: VText.label.copyWith(color: v.muted),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
               HeartRateCurve(
-                points: [
-                  for (final s in samples)
-                    Offset(s.timestampMs.toDouble(), s.value),
-                ],
+                points: points,
                 color: accent,
                 height: 108,
                 unit: _unit(detail),
                 valueFormat: (value) => _fmt(detail, value),
+                // 手表摘下来/没采集的几个小时不能连成一条假的横线。
+                maxGapMs: 2 * 60 * 60 * 1000,
               ),
               const SizedBox(height: 6),
               Row(
@@ -1781,7 +1788,7 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                   Text(
                     clock(
                       DateTime.fromMillisecondsSinceEpoch(
-                        samples.first.timestampMs,
+                        points.first.dx.round(),
                       ),
                     ),
                     style: VText.label.copyWith(fontSize: 9, color: v.muted),
@@ -1790,7 +1797,7 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
                   Text(
                     clock(
                       DateTime.fromMillisecondsSinceEpoch(
-                        samples.last.timestampMs,
+                        points.last.dx.round(),
                       ),
                     ),
                     style: VText.label.copyWith(fontSize: 9, color: v.muted),
@@ -1842,12 +1849,20 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            VRangeLine(
-              buckets: buckets,
-              color: accent,
-              unit: _unit(detail),
-              valueFormat: (value) => _fmt(detail, value),
-            ),
+            if (_barMetrics.contains(detail.metric))
+              VRangeBars(
+                buckets: buckets,
+                color: accent,
+                unit: _unit(detail),
+                valueFormat: (value) => _fmt(detail, value),
+              )
+            else
+              VRangeLine(
+                buckets: buckets,
+                color: accent,
+                unit: _unit(detail),
+                valueFormat: (value) => _fmt(detail, value),
+              ),
           ],
         ),
       ),
@@ -2204,6 +2219,38 @@ class _MetricDetailScreenState extends State<MetricDetailScreen> {
         Text(label, style: VText.label.copyWith(fontSize: 9.5, color: v.muted)),
       ],
     );
+  }
+
+  /// 日视图直接画原始采样，手表分钟级的心率会变成一圈锯齿，看起来到处是
+  /// 「拐弯」；心率按 10 分钟取均值，保留活动/静息的整体走势，单次尖峰不会
+  /// 再把整条线拧来拧去。血氧、体温等本身就是 5~30 分钟一条，保持原样。
+  List<Offset> _intradayPoints(String metric, List<MetricSample> samples) {
+    if (metric != 'heart_rate') {
+      return [
+        for (final s in samples) Offset(s.timestampMs.toDouble(), s.value),
+      ];
+    }
+    const bucketMs = 10 * 60 * 1000;
+    final sums = <int, (double, int)>{};
+    for (final s in samples) {
+      final key = s.timestampMs ~/ bucketMs * bucketMs;
+      final current = sums[key];
+      sums[key] = current == null
+          ? (s.value, 1)
+          : (current.$1 + s.value, current.$2 + 1);
+    }
+    final keys = sums.keys.toList()..sort();
+    // 采样只落在一个十分钟桶里时（刚测了几次），均成一个点反而没图，
+    // 这时退回原始采样，至少把测过的几次画出来。
+    if (keys.length < 2) {
+      return [
+        for (final s in samples) Offset(s.timestampMs.toDouble(), s.value),
+      ];
+    }
+    return [
+      for (final k in keys)
+        Offset(k.toDouble() + bucketMs / 2, sums[k]!.$1 / sums[k]!.$2),
+    ];
   }
 
   /// 同一天测了三次也只会均出一个点，窗口只剩一天时就没图了；
