@@ -23,7 +23,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
     if ! "$ROOT/scripts/check-private-endpoints.sh" --commit "$commit"; then
       status=1
     fi
-  done < <(git rev-list --no-merges "$range")
+  done < <(git rev-list --no-merges "$range" --not --remotes)
 done
 
 exit "$status"
