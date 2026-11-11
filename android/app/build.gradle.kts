@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "me.awen.vitaloop"
-    compileSdk = flutter.compileSdkVersion
+    // okhttp 5.x（okhttp-android）要求依赖方至少使用 Android API 37 编译。
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
