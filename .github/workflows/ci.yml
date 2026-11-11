@@ -13,8 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Reject private awen.me domains
-        run: ./scripts/check-domains.sh --all
+      - name: Reject private domains and IPs
+        env:
+          VITALOOP_PRIVATE_PATTERNS: ${{ secrets.VITALOOP_PRIVATE_PATTERNS }}
+        run: ./scripts/check-private-endpoints.sh --all
       - uses: actions/setup-java@v6
         with:
           distribution: temurin

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 推送前检查本次要推送的每个提交，防止历史提交里残留 awen.me 域名。
+# 推送前检查本次要推送的每个提交，防止历史提交里残留私有域名或 IP。
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -20,7 +20,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 
   while read -r commit; do
     [ -z "$commit" ] && continue
-    if ! "$ROOT/scripts/check-domains.sh" --commit "$commit"; then
+    if ! "$ROOT/scripts/check-private-endpoints.sh" --commit "$commit"; then
       status=1
     fi
   done < <(git rev-list --no-merges "$range")

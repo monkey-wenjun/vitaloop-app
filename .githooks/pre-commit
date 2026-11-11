@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 提交前检查暂存区，防止把 awen.me 域名带进公共仓库。
+# 提交前检查暂存区，防止私有域名或私有 IP 进入公共仓库。
 set -euo pipefail
 
 ROOT=$(git rev-parse --show-toplevel)
-exec "$ROOT/scripts/check-domains.sh" --staged
+exec "$ROOT/scripts/check-private-endpoints.sh" --staged
