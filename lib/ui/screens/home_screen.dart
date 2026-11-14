@@ -529,6 +529,25 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           );
+        case 'ecg':
+          final latest = state.ecg.isNotEmpty ? state.ecg.first : null;
+          return VMini(
+            label: '心电',
+            value: latest?.arrhythmiaType == null
+                ? '--'
+                : arrhythmiaLabel(latest!.arrhythmiaType!),
+            unit: latest == null ? '' : '${latest.avgHeartRate ?? '--'} bpm',
+            sub: latest == null
+                ? '暂无记录'
+                : '${relativeDay(DateTime.fromMillisecondsSinceEpoch(latest.startMs))} · ${(latest.sampleCount / 500).round()} 秒',
+            background: v.pink,
+            foreground: v.heartInk,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => HeartRhythmScreen(records: state.arrhythmia),
+              ),
+            ),
+          );
         default:
           return const SizedBox.shrink();
       }

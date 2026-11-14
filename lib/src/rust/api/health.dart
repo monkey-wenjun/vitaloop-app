@@ -394,6 +394,9 @@ Future<List<ArrhythmiaEntry>> getArrhythmiaRecords({
   required PlatformInt64 limit,
 }) => RustLib.instance.api.crateApiHealthGetArrhythmiaRecords(limit: limit);
 
+Future<List<EcgEntry>> getEcgRecords({required PlatformInt64 limit}) =>
+    RustLib.instance.api.crateApiHealthGetEcgRecords(limit: limit);
+
 Future<WatchIdentity> getWatchIdentity() =>
     RustLib.instance.api.crateApiHealthGetWatchIdentity();
 

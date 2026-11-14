@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1696054802;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 43561033;
 
 // Section: executor
 
@@ -1182,6 +1182,41 @@ fn wire__crate__api__health__get_daily_ring_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
                         let output_ok = crate::api::health::get_daily_ring(api_day)?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__health__get_ecg_records_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_ecg_records",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_limit = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::health::get_ecg_records(api_limit)?;
                         std::result::Result::Ok(output_ok)
                     })(),
                 )
@@ -3275,6 +3310,24 @@ impl SseDecode for crate::api::types::DeviceInfo {
     }
 }
 
+impl SseDecode for crate::api::types::EcgEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_startMs = <i64>::sse_decode(deserializer);
+        let mut var_endMs = <i64>::sse_decode(deserializer);
+        let mut var_avgHeartRate = <Option<i64>>::sse_decode(deserializer);
+        let mut var_arrhythmiaType = <Option<i64>>::sse_decode(deserializer);
+        let mut var_sampleCount = <i64>::sse_decode(deserializer);
+        return crate::api::types::EcgEntry {
+            start_ms: var_startMs,
+            end_ms: var_endMs,
+            avg_heart_rate: var_avgHeartRate,
+            arrhythmia_type: var_arrhythmiaType,
+            sample_count: var_sampleCount,
+        };
+    }
+}
+
 impl SseDecode for crate::api::types::Equipment {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3397,6 +3450,10 @@ impl SseDecode for crate::api::types::HomeSummary {
         let mut var_respiration = <Option<i64>>::sse_decode(deserializer);
         let mut var_arrhythmiaResult = <Option<i64>>::sse_decode(deserializer);
         let mut var_arrhythmiaAtMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_ecgResult = <Option<i64>>::sse_decode(deserializer);
+        let mut var_ecgAvgHeartRate = <Option<i64>>::sse_decode(deserializer);
+        let mut var_ecgAtMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_ecgDurationSec = <Option<i64>>::sse_decode(deserializer);
         let mut var_emotionStatus = <Option<i64>>::sse_decode(deserializer);
         let mut var_emotionValence = <Option<f64>>::sse_decode(deserializer);
         let mut var_emotionArousal = <Option<f64>>::sse_decode(deserializer);
@@ -3445,6 +3502,10 @@ impl SseDecode for crate::api::types::HomeSummary {
             respiration: var_respiration,
             arrhythmia_result: var_arrhythmiaResult,
             arrhythmia_at_ms: var_arrhythmiaAtMs,
+            ecg_result: var_ecgResult,
+            ecg_avg_heart_rate: var_ecgAvgHeartRate,
+            ecg_at_ms: var_ecgAtMs,
+            ecg_duration_sec: var_ecgDurationSec,
             emotion_status: var_emotionStatus,
             emotion_valence: var_emotionValence,
             emotion_arousal: var_emotionArousal,
@@ -3631,6 +3692,18 @@ impl SseDecode for Vec<crate::api::types::DeviceInfo> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::types::DeviceInfo>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::types::EcgEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::types::EcgEntry>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -4833,91 +4906,92 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         31 => wire__crate__api__health__get_daily_ring_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__health__get_glucose_records_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__health__get_goals_impl(port, ptr, rust_vec_len, data_len),
-        34 => {
+        32 => wire__crate__api__health__get_ecg_records_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__health__get_glucose_records_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__health__get_goals_impl(port, ptr, rust_vec_len, data_len),
+        35 => {
             wire__crate__api__health__get_heart_rate_series_impl(port, ptr, rust_vec_len, data_len)
         }
-        35 => wire__crate__api__health__get_home_summary_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__health__get_metric_days_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__health__get_metric_detail_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__health__get_metric_series_impl(port, ptr, rust_vec_len, data_len),
-        39 => {
+        36 => wire__crate__api__health__get_home_summary_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__health__get_metric_days_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__health__get_metric_detail_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__health__get_metric_series_impl(port, ptr, rust_vec_len, data_len),
+        40 => {
             wire__crate__api__health__get_personal_records_impl(port, ptr, rust_vec_len, data_len)
         }
-        40 => wire__crate__api__health__get_profile_impl(port, ptr, rust_vec_len, data_len),
-        41 => {
+        41 => wire__crate__api__health__get_profile_impl(port, ptr, rust_vec_len, data_len),
+        42 => {
             wire__crate__api__health__get_readiness_detail_impl(port, ptr, rust_vec_len, data_len)
         }
-        42 => {
+        43 => {
             wire__crate__api__health__get_readiness_series_impl(port, ptr, rust_vec_len, data_len)
         }
-        43 => wire__crate__api__health__get_running_index_history_impl(
+        44 => wire__crate__api__health__get_running_index_history_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__crate__api__health__get_setting_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__health__get_sleep_detail_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__health__get_sleep_summary_impl(port, ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__health__get_watch_identity_impl(port, ptr, rust_vec_len, data_len),
-        48 => wire__crate__api__health__get_watch_logs_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__health__get_workout_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__health__import_account_data_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__health__import_legacy_data_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__health__ingest_watch_data_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__health__legacy_db_available_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__health__list_apnea_records_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__health__list_daily_rings_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__health__list_devices_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__health__list_equipment_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__health__list_hourly_status_impl(port, ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__health__list_saved_routes_impl(port, ptr, rust_vec_len, data_len),
-        61 => wire__crate__api__health__list_strength_exercises_impl(
+        45 => wire__crate__api__health__get_setting_impl(port, ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__health__get_sleep_detail_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__health__get_sleep_summary_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__health__get_watch_identity_impl(port, ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__health__get_watch_logs_impl(port, ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__health__get_workout_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__health__import_account_data_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__health__import_legacy_data_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__health__ingest_watch_data_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__health__legacy_db_available_impl(port, ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__health__list_apnea_records_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__health__list_daily_rings_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__health__list_devices_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__health__list_equipment_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__health__list_hourly_status_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__health__list_saved_routes_impl(port, ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__health__list_strength_exercises_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        62 => wire__crate__api__health__list_strength_sets_impl(port, ptr, rust_vec_len, data_len),
-        63 => wire__crate__api__health__list_strength_templates_impl(
+        63 => wire__crate__api__health__list_strength_sets_impl(port, ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__health__list_strength_templates_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        64 => wire__crate__api__health__list_weights_impl(port, ptr, rust_vec_len, data_len),
-        65 => wire__crate__api__health__list_workouts_impl(port, ptr, rust_vec_len, data_len),
-        66 => wire__crate__api__health__local_data_count_impl(port, ptr, rust_vec_len, data_len),
-        67 => wire__crate__api__navigation__route_guidance_impl(port, ptr, rust_vec_len, data_len),
-        68 => wire__crate__api__health__save_goals_impl(port, ptr, rust_vec_len, data_len),
-        69 => wire__crate__api__health__save_manual_workout_impl(port, ptr, rust_vec_len, data_len),
-        70 => wire__crate__api__health__save_profile_impl(port, ptr, rust_vec_len, data_len),
-        71 => wire__crate__api__health__save_saved_route_impl(port, ptr, rust_vec_len, data_len),
-        72 => wire__crate__api__health__save_strength_sets_impl(port, ptr, rust_vec_len, data_len),
-        73 => {
+        65 => wire__crate__api__health__list_weights_impl(port, ptr, rust_vec_len, data_len),
+        66 => wire__crate__api__health__list_workouts_impl(port, ptr, rust_vec_len, data_len),
+        67 => wire__crate__api__health__local_data_count_impl(port, ptr, rust_vec_len, data_len),
+        68 => wire__crate__api__navigation__route_guidance_impl(port, ptr, rust_vec_len, data_len),
+        69 => wire__crate__api__health__save_goals_impl(port, ptr, rust_vec_len, data_len),
+        70 => wire__crate__api__health__save_manual_workout_impl(port, ptr, rust_vec_len, data_len),
+        71 => wire__crate__api__health__save_profile_impl(port, ptr, rust_vec_len, data_len),
+        72 => wire__crate__api__health__save_saved_route_impl(port, ptr, rust_vec_len, data_len),
+        73 => wire__crate__api__health__save_strength_sets_impl(port, ptr, rust_vec_len, data_len),
+        74 => {
             wire__crate__api__health__save_strength_template_impl(port, ptr, rust_vec_len, data_len)
         }
-        74 => wire__crate__api__health__save_watch_identity_impl(port, ptr, rust_vec_len, data_len),
-        75 => {
+        75 => wire__crate__api__health__save_watch_identity_impl(port, ptr, rust_vec_len, data_len),
+        76 => {
             wire__crate__api__health__save_workout_recovery_impl(port, ptr, rust_vec_len, data_len)
         }
-        76 => wire__crate__api__health__seed_demo_data_impl(port, ptr, rust_vec_len, data_len),
-        77 => wire__crate__api__health__set_setting_impl(port, ptr, rust_vec_len, data_len),
-        78 => wire__crate__api__health__set_workout_weather_impl(port, ptr, rust_vec_len, data_len),
-        80 => {
+        77 => wire__crate__api__health__seed_demo_data_impl(port, ptr, rust_vec_len, data_len),
+        78 => wire__crate__api__health__set_setting_impl(port, ptr, rust_vec_len, data_len),
+        79 => wire__crate__api__health__set_workout_weather_impl(port, ptr, rust_vec_len, data_len),
+        81 => {
             wire__crate__api__health__update_blood_glucose_impl(port, ptr, rust_vec_len, data_len)
         }
-        81 => {
+        82 => {
             wire__crate__api__health__update_blood_pressure_impl(port, ptr, rust_vec_len, data_len)
         }
-        82 => wire__crate__api__health__update_equipment_impl(port, ptr, rust_vec_len, data_len),
-        83 => {
+        83 => wire__crate__api__health__update_equipment_impl(port, ptr, rust_vec_len, data_len),
+        84 => {
             wire__crate__api__health__update_weight_record_impl(port, ptr, rust_vec_len, data_len)
         }
-        84 => wire__crate__api__health__workouts_missing_weather_impl(
+        85 => wire__crate__api__health__workouts_missing_weather_impl(
             port,
             ptr,
             rust_vec_len,
@@ -4936,7 +5010,7 @@ fn pde_ffi_dispatcher_sync_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         15 => wire__crate__api__health__cycling_power_watts_impl(ptr, rust_vec_len, data_len),
-        79 => wire__crate__api__health__today_epoch_day_impl(ptr, rust_vec_len, data_len),
+        80 => wire__crate__api__health__today_epoch_day_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5098,6 +5172,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::types::DeviceInfo>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::types::EcgEntry {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.start_ms.into_into_dart().into_dart(),
+            self.end_ms.into_into_dart().into_dart(),
+            self.avg_heart_rate.into_into_dart().into_dart(),
+            self.arrhythmia_type.into_into_dart().into_dart(),
+            self.sample_count.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::types::EcgEntry {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::types::EcgEntry>
+    for crate::api::types::EcgEntry
+{
+    fn into_into_dart(self) -> crate::api::types::EcgEntry {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::types::Equipment {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -5224,6 +5319,10 @@ impl flutter_rust_bridge::IntoDart for crate::api::types::HomeSummary {
             self.respiration.into_into_dart().into_dart(),
             self.arrhythmia_result.into_into_dart().into_dart(),
             self.arrhythmia_at_ms.into_into_dart().into_dart(),
+            self.ecg_result.into_into_dart().into_dart(),
+            self.ecg_avg_heart_rate.into_into_dart().into_dart(),
+            self.ecg_at_ms.into_into_dart().into_dart(),
+            self.ecg_duration_sec.into_into_dart().into_dart(),
             self.emotion_status.into_into_dart().into_dart(),
             self.emotion_valence.into_into_dart().into_dart(),
             self.emotion_arousal.into_into_dart().into_dart(),
@@ -6200,6 +6299,17 @@ impl SseEncode for crate::api::types::DeviceInfo {
     }
 }
 
+impl SseEncode for crate::api::types::EcgEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.start_ms, serializer);
+        <i64>::sse_encode(self.end_ms, serializer);
+        <Option<i64>>::sse_encode(self.avg_heart_rate, serializer);
+        <Option<i64>>::sse_encode(self.arrhythmia_type, serializer);
+        <i64>::sse_encode(self.sample_count, serializer);
+    }
+}
+
 impl SseEncode for crate::api::types::Equipment {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -6292,6 +6402,10 @@ impl SseEncode for crate::api::types::HomeSummary {
         <Option<i64>>::sse_encode(self.respiration, serializer);
         <Option<i64>>::sse_encode(self.arrhythmia_result, serializer);
         <Option<i64>>::sse_encode(self.arrhythmia_at_ms, serializer);
+        <Option<i64>>::sse_encode(self.ecg_result, serializer);
+        <Option<i64>>::sse_encode(self.ecg_avg_heart_rate, serializer);
+        <Option<i64>>::sse_encode(self.ecg_at_ms, serializer);
+        <Option<i64>>::sse_encode(self.ecg_duration_sec, serializer);
         <Option<i64>>::sse_encode(self.emotion_status, serializer);
         <Option<f64>>::sse_encode(self.emotion_valence, serializer);
         <Option<f64>>::sse_encode(self.emotion_arousal, serializer);
@@ -6423,6 +6537,16 @@ impl SseEncode for Vec<crate::api::types::DeviceInfo> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::types::DeviceInfo>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::types::EcgEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::types::EcgEntry>::sse_encode(item, serializer);
         }
     }
 }

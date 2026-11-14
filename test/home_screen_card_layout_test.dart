@@ -5,6 +5,7 @@ import 'package:vitaloop/state/app_state.dart';
 import 'package:vitaloop/theme/tokens.dart';
 import 'package:vitaloop/ui/components.dart';
 import 'package:vitaloop/ui/screens/home_screen.dart';
+import 'package:vitaloop/ui/screens/heart_rhythm_screen.dart';
 
 void main() {
   testWidgets('进入编辑态后三列小卡保持原尺寸', (tester) async {
@@ -154,6 +155,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect((state as _RefreshTestState).refreshCalls, 1);
+  });
+
+  testWidgets('心电卡片显示最近一次 ECG 结果', (tester) async {
+    tester.view.physicalSize = const Size(411, 905);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final state = _demoState()
+      ..ecg = [
+        EcgEntry(
+          startMs: DateTime(2026, 11, 7, 8, 30).millisecondsSinceEpoch,
+          endMs: DateTime(2026, 11, 7, 8, 31).millisecondsSinceEpoch,
+          avgHeartRate: 63,
+          arrhythmiaType: 1,
+          sampleCount: 15000,
+        ),
+      ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(Brightness.light),
+        home: Scaffold(
+          body: HomeScreen(state: state, onOpenTab: (_) {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final card = find.ancestor(
+      of: find.text('心电'),
+      matching: find.byType(VMini),
+    );
+    await tester.scrollUntilVisible(
+      card,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VMini), findsWidgets);
+    expect(find.text('心电'), findsOneWidget);
+    expect(find.textContaining('63'), findsWidgets);
+    expect(find.textContaining('· 30 秒'), findsOneWidget);
+
+    await tester.tap(find.text('心电'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HeartRhythmScreen), findsOneWidget);
   });
 }
 

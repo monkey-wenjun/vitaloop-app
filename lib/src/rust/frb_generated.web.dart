@@ -83,6 +83,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DeviceInfo dco_decode_device_info(dynamic raw);
 
   @protected
+  EcgEntry dco_decode_ecg_entry(dynamic raw);
+
+  @protected
   Equipment dco_decode_equipment(dynamic raw);
 
   @protected
@@ -132,6 +135,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<DeviceInfo> dco_decode_list_device_info(dynamic raw);
+
+  @protected
+  List<EcgEntry> dco_decode_list_ecg_entry(dynamic raw);
 
   @protected
   List<Equipment> dco_decode_list_equipment(dynamic raw);
@@ -392,6 +398,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DeviceInfo sse_decode_device_info(SseDeserializer deserializer);
 
   @protected
+  EcgEntry sse_decode_ecg_entry(SseDeserializer deserializer);
+
+  @protected
   Equipment sse_decode_equipment(SseDeserializer deserializer);
 
   @protected
@@ -449,6 +458,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<DeviceInfo> sse_decode_list_device_info(SseDeserializer deserializer);
+
+  @protected
+  List<EcgEntry> sse_decode_list_ecg_entry(SseDeserializer deserializer);
 
   @protected
   List<Equipment> sse_decode_list_equipment(SseDeserializer deserializer);
@@ -769,6 +781,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_device_info(DeviceInfo self, SseSerializer serializer);
 
   @protected
+  void sse_encode_ecg_entry(EcgEntry self, SseSerializer serializer);
+
+  @protected
   void sse_encode_equipment(Equipment self, SseSerializer serializer);
 
   @protected
@@ -842,6 +857,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     List<DeviceInfo> self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_list_ecg_entry(List<EcgEntry> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_equipment(

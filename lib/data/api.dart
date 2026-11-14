@@ -654,6 +654,9 @@ class VitaloopApi {
   static Future<List<ArrhythmiaEntry>> arrhythmia({int limit = 500}) =>
       rust.getArrhythmiaRecords(limit: limit);
 
+  static Future<List<EcgEntry>> ecg({int limit = 100}) =>
+      rust.getEcgRecords(limit: limit);
+
   static Future<WatchIdentity> watchIdentity() => rust.getWatchIdentity();
 
   static Future<List<WatchLog>> watchLogs({int limit = 500}) =>

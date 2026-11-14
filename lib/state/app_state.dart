@@ -37,6 +37,7 @@ class AppState extends ChangeNotifier {
   List<BloodPressureEntry> bloodPressure = const [];
   List<GlucoseEntry> glucose = const [];
   List<ArrhythmiaEntry> arrhythmia = const [];
+  List<EcgEntry> ecg = const [];
   WatchIdentity? watchIdentity;
   Goals? goals;
   int maxHr = 0;
@@ -121,6 +122,7 @@ class AppState extends ChangeNotifier {
       VitaloopApi.bloodPressure(limit: 200),
       VitaloopApi.glucose(limit: 200),
       VitaloopApi.arrhythmia(limit: 500),
+      VitaloopApi.ecg(limit: 100),
       VitaloopApi.watchIdentity(),
       VitaloopApi.goals(),
       VitaloopApi.setting('max_hr', ''),
@@ -135,10 +137,11 @@ class AppState extends ChangeNotifier {
     bloodPressure = results[6] as List<BloodPressureEntry>;
     glucose = results[7] as List<GlucoseEntry>;
     arrhythmia = results[8] as List<ArrhythmiaEntry>;
-    watchIdentity = results[9] as WatchIdentity;
-    goals = results[10] as Goals;
-    maxHr = int.tryParse(results[11] as String) ?? 0;
-    maxHrAuto = (results[12] as String) != '0';
+    ecg = results[9] as List<EcgEntry>;
+    watchIdentity = results[10] as WatchIdentity;
+    goals = results[11] as Goals;
+    maxHr = int.tryParse(results[12] as String) ?? 0;
+    maxHrAuto = (results[13] as String) != '0';
     notifyListeners();
     unawaited(WorkoutWeatherService.backfill());
     _ensureCloudAutoSync();

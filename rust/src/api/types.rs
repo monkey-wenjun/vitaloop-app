@@ -45,6 +45,10 @@ pub struct HomeSummary {
     pub respiration: Option<i64>,
     pub arrhythmia_result: Option<i64>,
     pub arrhythmia_at_ms: Option<i64>,
+    pub ecg_result: Option<i64>,
+    pub ecg_avg_heart_rate: Option<i64>,
+    pub ecg_at_ms: Option<i64>,
+    pub ecg_duration_sec: Option<i64>,
     pub emotion_status: Option<i64>,
     pub emotion_valence: Option<f64>,
     pub emotion_arousal: Option<f64>,
@@ -475,6 +479,14 @@ pub struct GlucoseEntry {
 pub struct ArrhythmiaEntry {
     pub timestamp_ms: i64,
     pub result_type: i64,
+}
+
+pub struct EcgEntry {
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub avg_heart_rate: Option<i64>,
+    pub arrhythmia_type: Option<i64>,
+    pub sample_count: i64,
 }
 
 pub struct SleepStage {

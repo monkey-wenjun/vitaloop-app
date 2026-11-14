@@ -238,6 +238,41 @@ class DeviceInfo {
           connected == other.connected;
 }
 
+class EcgEntry {
+  final PlatformInt64 startMs;
+  final PlatformInt64 endMs;
+  final PlatformInt64? avgHeartRate;
+  final PlatformInt64? arrhythmiaType;
+  final PlatformInt64 sampleCount;
+
+  const EcgEntry({
+    required this.startMs,
+    required this.endMs,
+    this.avgHeartRate,
+    this.arrhythmiaType,
+    required this.sampleCount,
+  });
+
+  @override
+  int get hashCode =>
+      startMs.hashCode ^
+      endMs.hashCode ^
+      avgHeartRate.hashCode ^
+      arrhythmiaType.hashCode ^
+      sampleCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EcgEntry &&
+          runtimeType == other.runtimeType &&
+          startMs == other.startMs &&
+          endMs == other.endMs &&
+          avgHeartRate == other.avgHeartRate &&
+          arrhythmiaType == other.arrhythmiaType &&
+          sampleCount == other.sampleCount;
+}
+
 /// 用户自己登记的装备（跑鞋、骑行装备、泳池装备…）。
 /// start_km 是启用时该运动类型的累计里程，已用里程由当前累计减去它得出。
 class Equipment {
@@ -431,6 +466,10 @@ class HomeSummary {
   final PlatformInt64? respiration;
   final PlatformInt64? arrhythmiaResult;
   final PlatformInt64? arrhythmiaAtMs;
+  final PlatformInt64? ecgResult;
+  final PlatformInt64? ecgAvgHeartRate;
+  final PlatformInt64? ecgAtMs;
+  final PlatformInt64? ecgDurationSec;
   final PlatformInt64? emotionStatus;
   final double? emotionValence;
   final double? emotionArousal;
@@ -480,6 +519,10 @@ class HomeSummary {
     this.respiration,
     this.arrhythmiaResult,
     this.arrhythmiaAtMs,
+    this.ecgResult,
+    this.ecgAvgHeartRate,
+    this.ecgAtMs,
+    this.ecgDurationSec,
     this.emotionStatus,
     this.emotionValence,
     this.emotionArousal,
@@ -531,6 +574,10 @@ class HomeSummary {
       respiration.hashCode ^
       arrhythmiaResult.hashCode ^
       arrhythmiaAtMs.hashCode ^
+      ecgResult.hashCode ^
+      ecgAvgHeartRate.hashCode ^
+      ecgAtMs.hashCode ^
+      ecgDurationSec.hashCode ^
       emotionStatus.hashCode ^
       emotionValence.hashCode ^
       emotionArousal.hashCode ^
@@ -584,6 +631,10 @@ class HomeSummary {
           respiration == other.respiration &&
           arrhythmiaResult == other.arrhythmiaResult &&
           arrhythmiaAtMs == other.arrhythmiaAtMs &&
+          ecgResult == other.ecgResult &&
+          ecgAvgHeartRate == other.ecgAvgHeartRate &&
+          ecgAtMs == other.ecgAtMs &&
+          ecgDurationSec == other.ecgDurationSec &&
           emotionStatus == other.emotionStatus &&
           emotionValence == other.emotionValence &&
           emotionArousal == other.emotionArousal &&

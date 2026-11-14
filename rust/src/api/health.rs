@@ -448,6 +448,10 @@ pub fn get_arrhythmia_records(limit: i64) -> Result<Vec<ArrhythmiaEntry>> {
     store::arrhythmia_records(limit)
 }
 
+pub fn get_ecg_records(limit: i64) -> Result<Vec<EcgEntry>> {
+    store::ecg_records(limit)
+}
+
 pub fn get_watch_identity() -> Result<WatchIdentity> {
     store::watch_identity()
 }

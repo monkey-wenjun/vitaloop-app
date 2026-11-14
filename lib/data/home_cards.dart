@@ -41,6 +41,7 @@ class HomeCardLayout {
     HomeCardSpec('emotion', '情绪', HomeCardSize.mini),
     HomeCardSpec('vo2max', '最大摄氧量', HomeCardSize.mini),
     HomeCardSpec('arrhythmia', '心律', HomeCardSize.mini),
+    HomeCardSpec('ecg', '心电', HomeCardSize.mini),
   ];
 
   static final List<String> defaultOrder = [for (final spec in specs) spec.id];

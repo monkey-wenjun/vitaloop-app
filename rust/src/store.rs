@@ -1192,6 +1192,14 @@ pub fn home_summary(day: i64) -> Result<HomeSummary> {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?;
+        let ecg: Option<(i64, i64, i64, i64)> = conn
+            .query_row(
+                "SELECT arrhythmia_type, avg_heart_rate, start_ms, end_ms
+                 FROM ecg_records ORDER BY start_ms DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .optional()?;
         let emotion: Option<(i64, Option<f64>, Option<f64>)> = conn
             .query_row(
                 "SELECT status, valence, arousal FROM emotion_records ORDER BY ts_ms DESC LIMIT 1",
@@ -1293,8 +1301,12 @@ pub fn home_summary(day: i64) -> Result<HomeSummary> {
             blood_pressure_diastolic: bp.map(|v| v.1),
             glucose_mmol: glucose,
             respiration: respiration.map(|v| v.round() as i64),
-            arrhythmia_result: arrhythmia.map(|v| v.0),
-            arrhythmia_at_ms: arrhythmia.map(|v| v.1),
+            arrhythmia_result: arrhythmia.as_ref().map(|v| v.0),
+            arrhythmia_at_ms: arrhythmia.as_ref().map(|v| v.1),
+            ecg_result: ecg.as_ref().map(|v| v.0),
+            ecg_avg_heart_rate: ecg.as_ref().map(|v| v.1),
+            ecg_at_ms: ecg.as_ref().map(|v| v.2),
+            ecg_duration_sec: ecg.as_ref().map(|v| ((v.3 - v.2) / 1000).max(0)),
             emotion_status: emotion.as_ref().map(|v| v.0),
             emotion_valence: emotion.as_ref().and_then(|v| v.1),
             emotion_arousal: emotion.as_ref().and_then(|v| v.2),
@@ -3608,6 +3620,25 @@ pub fn arrhythmia_records(limit: i64) -> Result<Vec<ArrhythmiaEntry>> {
             Ok(ArrhythmiaEntry {
                 timestamp_ms: r.get(0)?,
                 result_type: r.get(1)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    })
+}
+
+pub fn ecg_records(limit: i64) -> Result<Vec<EcgEntry>> {
+    with_conn(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT start_ms, end_ms, avg_heart_rate, arrhythmia_type, sample_count
+             FROM ecg_records ORDER BY start_ms DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |r| {
+            Ok(EcgEntry {
+                start_ms: r.get(0)?,
+                end_ms: r.get(1)?,
+                avg_heart_rate: r.get(2)?,
+                arrhythmia_type: r.get(3)?,
+                sample_count: r.get(4)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
