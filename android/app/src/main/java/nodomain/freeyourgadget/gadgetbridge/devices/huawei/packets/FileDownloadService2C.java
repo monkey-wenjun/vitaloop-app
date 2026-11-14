@@ -36,6 +36,7 @@ public class FileDownloadService2C {
         GPS,
         SEQUENCE_DATA,
         PERIOD_RRI,
+        ECG_ANALYSIS_DATA,
         UNKNOWN; // Never use this as input
 
         static byte fileTypeToByte(FileType fileType) {
@@ -50,6 +51,8 @@ public class FileDownloadService2C {
                     return (byte) 0x11;
                 case SEQUENCE_DATA:
                     return (byte) 0x16;
+                case ECG_ANALYSIS_DATA:
+                    return (byte) 0x18;
                 default:
                     throw new RuntimeException();
             }
@@ -67,6 +70,8 @@ public class FileDownloadService2C {
                     return FileType.GPS;
                 case 0x16:
                     return FileType.SEQUENCE_DATA;
+                case 0x18:
+                    return FileType.ECG_ANALYSIS_DATA;
                 default:
                     return FileType.UNKNOWN;
             }

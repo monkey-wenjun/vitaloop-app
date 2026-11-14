@@ -40,6 +40,7 @@ import kotlinx.coroutines.runBlocking
 import nodomain.freeyourgadget.gadgetbridge.GBApplication
 import nodomain.freeyourgadget.gadgetbridge.activities.devicesettings.DeviceSettingsPreferenceConst
 import nodomain.freeyourgadget.gadgetbridge.devices.huawei.HuaweiConstants
+import nodomain.freeyourgadget.gadgetbridge.devices.huawei.HuaweiEcgFileParser
 import nodomain.freeyourgadget.gadgetbridge.devices.huawei.HuaweiCoordinator
 import nodomain.freeyourgadget.gadgetbridge.devices.huawei.HuaweiCoordinatorSupplier
 import nodomain.freeyourgadget.gadgetbridge.devices.huawei.HuaweiCrypto
@@ -263,6 +264,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         private const val P2P_SYNC_INTERVAL_MS = 900_000L
         private const val WEATHER_CACHE_TTL_MS = 30 * 60_000L
         private const val STRESS_FILE_SYNC_INTERVAL_MS = 3_600_000L
+        private const val ECG_FILE_SYNC_INTERVAL_MS = 3_600_000L
         private const val SLEEP_FILE_SYNC_INTERVAL_MS = 300_000L
         private const val SLEEP_DETAIL_SYNC_INTERVAL_MS = 300_000L
         private const val TOOL_TIMEOUT_MS = 20_000L
@@ -391,6 +393,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     @Volatile private var p2pDictEventCount = 0
     @Volatile private var lastLinkBusyAt = 0L
     @Volatile private var lastStressFileSyncAt = 0L
+    @Volatile private var lastEcgFileSyncAt = 0L
     @Volatile private var lastSleepFileSyncAt = 0L
     @Volatile private var lastSleepDetailSyncAt = 0L
     private var lastStoredStressBucket = -1L
@@ -2772,6 +2775,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                     downloadTruSleepData(end - 30 * 86_400, end)
                     downloadDictTrueSleepData()
                     maybeSyncStressFile()
+                    maybeSyncEcgFile()
                     startWorkoutSync(end)
                 }
             })
@@ -3902,6 +3906,66 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                     override fun downloadException(e: HuaweiFileDownloadManager.HuaweiFileDownloadException) {
                         FileLogger.e(TAG, "压力文件下载失败", e)
                         addLog("压力文件下载失败：${e.message ?: e.javaClass.simpleName}")
+                    }
+                }
+            ),
+            true
+        )
+    }
+
+    /** ECG 真通道：0x2C/1 ecg_analysis_data.bin；一次测量一条记录加原始波形采样。 */
+    private fun maybeSyncEcgFile() {
+        val now = System.currentTimeMillis()
+        if (now - lastEcgFileSyncAt < ECG_FILE_SYNC_INTERVAL_MS) return
+        lastEcgFileSyncAt = now
+        downloadEcgFile(30)
+    }
+
+    private fun downloadEcgFile(days: Int) {
+        val end = (System.currentTimeMillis() / 1000).toInt()
+        val start = end - days * 86_400
+        FileLogger.i(TAG, "请求ECG文件(0x2C/1) window=$start..$end")
+        fileDownloadManager.addToQueue(
+            HuaweiFileDownloadManager.FileRequest.ecgAnalysisFileRequest(
+                start,
+                end,
+                object : HuaweiFileDownloadManager.FileDownloadCallback() {
+                    override fun downloadComplete(fileRequest: HuaweiFileDownloadManager.FileRequest) {
+                        val data = fileRequest.data
+                        if (data.isEmpty()) return
+                        try {
+                            val result = HuaweiEcgFileParser.parse(data)
+                            if (result.version != 0) {
+                                addLog("ECG：暂不支持文件版本 v${result.version}")
+                                return
+                            }
+                            var stored = 0
+                            for (record in result.records) {
+                                val samples = JSONArray()
+                                for (value in record.ecgData) samples.put(value.toDouble())
+                                emit(
+                                    JSONObject()
+                                        .put("t", "ecg")
+                                        .put("start", record.startTimeMs)
+                                        .put("end", record.endTimeMs)
+                                        .put("avg_hr", record.averageHeartRate)
+                                        .put("arrhythmia", record.arrhythmiaType)
+                                        .put("symptoms", record.userSymptoms)
+                                        .put("app_version", record.appVersion)
+                                        .put("samples", samples)
+                                )
+                                stored++
+                            }
+                            addLog("ECG同步完成: $stored 条")
+                        } catch (e: Exception) {
+                            FileLogger.e(TAG, "ECG文件解析失败", e)
+                            addLog("ECG文件解析失败：${e.message ?: e.javaClass.simpleName}")
+                        }
+                    }
+
+                    override fun downloadException(e: HuaweiFileDownloadManager.HuaweiFileDownloadException) {
+                        FileLogger.e(TAG, "ECG文件下载失败", e)
+                        addLog("ECG文件下载失败：${e.message ?: e.javaClass.simpleName}")
                     }
                 }
             ),

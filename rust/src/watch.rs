@@ -67,6 +67,7 @@ fn sport_label(code: i64) -> &'static str {
 ///   {"t":"body_temp","ts":ms,"v":c}
 ///   {"t":"emotion","ts":ms,"status":n,"valence":x,"arousal":y}
 ///   {"t":"arrhythmia","ts":ms,"result":n,"measure_type":n}
+///   {"t":"ecg","start":ms,"end":ms,"avg_hr":n,"arrhythmia":n,"symptoms":n,"app_version":s,"samples":[x,y]}
 ///   {"t":"apnea","ts":ms,"level":n}
 ///   {"t":"active_hour","ts":ms,"v":1}
 ///   {"t":"daily_ring","end":ms,"step_goal":n,"step_user":n, ...}
@@ -149,6 +150,22 @@ pub fn ingest_watch_data(events_json: String) -> Result<String> {
                     body_temp_c = excluded.body_temp_c,
                     updated_ms = excluded.updated_ms
                  WHERE daily_metrics.body_temp_c IS NOT excluded.body_temp_c",
+            )?;
+            let mut ins_ecg = tx.prepare(
+                "INSERT INTO ecg_records(
+                    start_ms, end_ms, avg_heart_rate, arrhythmia_type, user_symptoms,
+                    app_version, sample_count, source)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, 'watch')
+                 ON CONFLICT(start_ms) DO UPDATE SET
+                    end_ms = excluded.end_ms,
+                    avg_heart_rate = excluded.avg_heart_rate,
+                    arrhythmia_type = excluded.arrhythmia_type,
+                    user_symptoms = excluded.user_symptoms,
+                    app_version = excluded.app_version,
+                    sample_count = excluded.sample_count",
+            )?;
+            let mut ins_ecg_sample = tx.prepare(
+                "INSERT OR REPLACE INTO ecg_samples(start_ms, sample_index, value) VALUES(?1, ?2, ?3)",
             )?;
 
             for ev in &events {
@@ -422,6 +439,38 @@ pub fn ingest_watch_data(events_json: String) -> Result<String> {
                                 params![ts, result, measure_type],
                             );
                             counts[9] += 1;
+                        }
+                    }
+                    "ecg" => {
+                        let start = ev.get("start").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let end = ev.get("end").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let samples = ev.get("samples").and_then(|v| v.as_array());
+                        if start > 0
+                            && end > start
+                            && samples.map(|v| !v.is_empty()).unwrap_or(false)
+                        {
+                            let values: Vec<f64> =
+                                samples.unwrap().iter().filter_map(|v| v.as_f64()).collect();
+                            if !values.is_empty() {
+                                let _ = ins_ecg.execute(params![
+                                    start,
+                                    end,
+                                    ev.get("avg_hr").and_then(|v| v.as_i64()).filter(|v| *v > 0),
+                                    ev.get("arrhythmia").and_then(|v| v.as_i64()),
+                                    ev.get("symptoms").and_then(|v| v.as_i64()),
+                                    ev.get("app_version").and_then(|v| v.as_str()),
+                                    values.len() as i64,
+                                ])?;
+                                tx.execute(
+                                    "DELETE FROM ecg_samples WHERE start_ms = ?1",
+                                    params![start],
+                                )?;
+                                for (index, value) in values.into_iter().enumerate() {
+                                    let _ =
+                                        ins_ecg_sample.execute(params![start, index as i64, value]);
+                                }
+                                counts[9] += 1;
+                            }
                         }
                     }
                     "apnea" => {
@@ -1573,6 +1622,7 @@ fn scale_stage_total(deep: i64, light: i64, rem: i64, target: i64) -> (i64, i64,
 mod tests {
     use super::*;
     use crate::store;
+    use std::time::Instant;
 
     #[test]
     fn stage_scaling_preserves_authoritative_total() {
@@ -2585,6 +2635,106 @@ mod tests {
         })
         .unwrap();
 
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn ingest_ecg_stores_summary_and_waveform_samples() {
+        let _guard = store::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path =
+            std::env::temp_dir().join(format!("vitaloop-watch-ecg-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        store::open(path.to_str().unwrap()).unwrap();
+
+        let start = 1_760_000_000_000i64;
+        ingest_watch_data(
+            json!({"events": [{
+                "t": "ecg",
+                "start": start,
+                "end": start + 30_000,
+                "avg_hr": 63,
+                "arrhythmia": 1,
+                "symptoms": 0,
+                "app_version": "5.0.1",
+                "samples": [0.0, 1.5, -0.5, 2.0]
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+
+        store::with_conn(|conn| {
+            let row: (i64, i64, i64, i64, i64, String, i64) = conn.query_row(
+                "SELECT start_ms, end_ms, avg_heart_rate, arrhythmia_type,
+                        user_symptoms, app_version, sample_count
+                 FROM ecg_records",
+                [],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                    ))
+                },
+            )?;
+            assert_eq!(row, (start, start + 30_000, 63, 1, 0, "5.0.1".into(), 4));
+            let count: i64 =
+                conn.query_row("SELECT COUNT(*) FROM ecg_samples", [], |r| r.get(0))?;
+            assert_eq!(count, 4);
+            Ok(())
+        })
+        .unwrap();
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn ingest_ecg_sixty_minutes_stays_fast_enough() {
+        let _guard = store::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path =
+            std::env::temp_dir().join(format!("vitaloop-watch-ecg-perf-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        store::open(path.to_str().unwrap()).unwrap();
+
+        let start = 1_760_000_000_000i64;
+        let samples: Vec<f64> = (0..600_000)
+            .map(|i| ((i % 97) as f64) / 16.0 - 3.0)
+            .collect();
+        let events = json!({
+            "events": [{
+                "t": "ecg",
+                "start": start,
+                "end": start + 3_600_000,
+                "avg_hr": 64,
+                "arrhythmia": 1,
+                "symptoms": 0,
+                "app_version": "5.0.1",
+                "samples": samples,
+            }]
+        });
+        let started = Instant::now();
+        let output = ingest_watch_data(events.to_string()).unwrap();
+        let elapsed = started.elapsed();
+        assert!(output.contains("\"other\":1"), "{output}");
+        let limit = if cfg!(debug_assertions) {
+            std::time::Duration::from_secs(5)
+        } else {
+            std::time::Duration::from_secs(1)
+        };
+        assert!(elapsed < limit, "600k samples took {elapsed:?}");
+
+        let stored: i64 = store::with_conn(|conn| {
+            Ok(conn.query_row(
+                "SELECT sample_count FROM ecg_records WHERE start_ms = ?1",
+                params![start],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+        assert_eq!(stored, 600_000);
         let _ = std::fs::remove_file(&path);
     }
 }

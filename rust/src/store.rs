@@ -343,6 +343,24 @@ CREATE TABLE IF NOT EXISTS arrhythmia_records(
   source TEXT NOT NULL DEFAULT 'watch'
 );
 
+CREATE TABLE IF NOT EXISTS ecg_records(
+  start_ms INTEGER PRIMARY KEY,
+  end_ms INTEGER NOT NULL,
+  avg_heart_rate INTEGER,
+  arrhythmia_type INTEGER,
+  user_symptoms INTEGER,
+  app_version TEXT,
+  sample_count INTEGER NOT NULL,
+  source TEXT NOT NULL DEFAULT 'watch'
+);
+
+CREATE TABLE IF NOT EXISTS ecg_samples(
+  start_ms INTEGER NOT NULL,
+  sample_index INTEGER NOT NULL,
+  value REAL NOT NULL,
+  PRIMARY KEY(start_ms, sample_index)
+);
+
 CREATE TABLE IF NOT EXISTS sleep_stages(
   start_ms INTEGER NOT NULL,
   end_ms INTEGER NOT NULL,

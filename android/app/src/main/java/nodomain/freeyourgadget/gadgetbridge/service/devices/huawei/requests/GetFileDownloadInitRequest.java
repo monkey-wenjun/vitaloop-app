@@ -63,6 +63,8 @@ public class GetFileDownloadInitRequest extends Request {
                 return FileDownloadService2C.FileType.SEQUENCE_DATA;
             case PERIOD_RRI:
                 return FileDownloadService2C.FileType.PERIOD_RRI;
+            case ECG_ANALYSIS_DATA:
+                return FileDownloadService2C.FileType.ECG_ANALYSIS_DATA;
             default:
                 return FileDownloadService2C.FileType.UNKNOWN;
         }
@@ -80,6 +82,8 @@ public class GetFileDownloadInitRequest extends Request {
                 return HuaweiFileDownloadManager.FileType.SEQUENCE_DATA;
             case PERIOD_RRI:
                 return HuaweiFileDownloadManager.FileType.PERIOD_RRI;
+            case ECG_ANALYSIS_DATA:
+                return HuaweiFileDownloadManager.FileType.ECG_ANALYSIS_DATA;
             default:
                 return HuaweiFileDownloadManager.FileType.UNKNOWN;
         }

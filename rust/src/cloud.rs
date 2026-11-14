@@ -24,6 +24,8 @@ pub(crate) const TABLES: &[&str] = &[
     "blood_pressure_records",
     "blood_glucose_records",
     "arrhythmia_records",
+    "ecg_records",
+    "ecg_samples",
     "sleep_stages",
     "sleep_bed",
     "emotion_records",
