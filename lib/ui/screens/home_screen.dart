@@ -12,6 +12,7 @@ import '../../theme/tokens.dart';
 import '../../util/format.dart';
 import '../components.dart';
 import 'auth_screen.dart';
+import 'ecg_screen.dart';
 import 'fitness_advice_screen.dart';
 import 'heart_rhythm_screen.dart';
 import 'metric_detail_screen.dart';
@@ -524,9 +525,7 @@ class _HomeScreenState extends State<HomeScreen> {
             background: v.green,
             foreground: v.greenInk,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => HeartRhythmScreen(records: state.arrhythmia),
-              ),
+              MaterialPageRoute(builder: (_) => EcgScreen(records: state.ecg)),
             ),
           );
         case 'ecg':

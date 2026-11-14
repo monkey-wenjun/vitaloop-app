@@ -5,7 +5,7 @@ import 'package:vitaloop/state/app_state.dart';
 import 'package:vitaloop/theme/tokens.dart';
 import 'package:vitaloop/ui/components.dart';
 import 'package:vitaloop/ui/screens/home_screen.dart';
-import 'package:vitaloop/ui/screens/heart_rhythm_screen.dart';
+import 'package:vitaloop/ui/screens/ecg_screen.dart';
 
 void main() {
   testWidgets('进入编辑态后三列小卡保持原尺寸', (tester) async {
@@ -203,7 +203,7 @@ void main() {
 
     await tester.tap(find.text('心电'));
     await tester.pumpAndSettle();
-    expect(find.byType(HeartRhythmScreen), findsOneWidget);
+    expect(find.byType(EcgScreen), findsOneWidget);
   });
 }
 
