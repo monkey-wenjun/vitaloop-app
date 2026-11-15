@@ -44,6 +44,12 @@ Captured from the Android development build with illustrative device data.
 - MapLibre/Protomaps PMTiles basemap when a tile source is configured, with
   Liberty light and dark styles, orange tracks, numbered kilometer markers, and
   road labels.
+- Optional terrain overlay on workout maps: server-computed contour lines
+  (20-50 m spacing, heavier lines every 100 m), DEM hillshade, and green
+  elevation tinting, with a 45° pitch for a tilted 3D-like view. Hillshade,
+  contours, and tilt can each be toggled by long-pressing the map. Contours are
+  computed locally by the companion server from public DEM tiles, so no
+  third-party terrain service is required.
 - Optional AMap raster basemap. Tencent and Baidu provider entries are reserved
   for builds that configure their official SDK keys.
 - Workout maps, heart-rate curves, splits, elevation, running dynamics, training
@@ -138,6 +144,11 @@ Deploy it with Docker Compose from that repository:
 ```bash
 docker compose up -d   # builds the image and serves 127.0.0.1:8793
 ```
+
+> **The author's demo instance is for trying the API only.** It runs on a small
+> personal machine that may be rebuilt, wiped, or taken offline at any time,
+> with no backup guarantee. Do not sync real health data to it — deploy your
+> own instance and keep your data on your own machine.
 
 For a build with a default cloud URL:
 
