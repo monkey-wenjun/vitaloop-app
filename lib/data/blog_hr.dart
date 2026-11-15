@@ -7,10 +7,7 @@ import 'dart:io';
 /// 该功能默认关闭：必须同时通过 --dart-define 提供 BLOGAPI_URL 和
 /// BLOGAPI_TOKEN 才会启用。服务端按 (user_id, timestamp) 去重，重复推送安全。
 class BlogHrApi {
-  static const base = String.fromEnvironment(
-    'BLOGAPI_URL',
-    defaultValue: '',
-  );
+  static const base = String.fromEnvironment('BLOGAPI_URL');
 
   /// sk_ 开头的 API Token（需 write 权限），通过 --dart-define=BLOGAPI_TOKEN= 注入。
   static const token = String.fromEnvironment('BLOGAPI_TOKEN');

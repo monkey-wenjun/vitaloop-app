@@ -367,17 +367,13 @@ class WatchBridge {
 
   Future<void> _pushMetricsToBlog(List<Map<String, dynamic>> batch) async {
     if (!BlogHrApi.enabled) return;
-    final defaultCursor =
-        DateTime.now().millisecondsSinceEpoch - 3 * 86400000;
+    final defaultCursor = DateTime.now().millisecondsSinceEpoch - 3 * 86400000;
     for (final entry in _blogMetricPaths.entries) {
       final t = entry.key;
       try {
         var cursor = _blogPushCursors[t];
         if (cursor == null) {
-          final saved = await VitaloopApi.setting(
-            'blog_push_last_ts_$t',
-            '',
-          );
+          final saved = await VitaloopApi.setting('blog_push_last_ts_$t', '');
           // 首次启用只回补最近 3 天，够博客 24h/7d 图用，也避免装机时打满接口
           cursor = int.tryParse(saved) ?? defaultCursor;
           _blogPushCursors[t] = cursor;
@@ -885,6 +881,9 @@ class WatchBridge {
     var fakeAndroidId = '';
     var savedAccount = '';
     var ephemerisUrl = '';
+    const injectedEphemerisUrl = String.fromEnvironment(
+      'VITALOOP_EPHEMERIS_URL',
+    );
     WatchIdentity? id;
     try {
       id = await VitaloopApi.watchIdentity();
@@ -893,6 +892,7 @@ class WatchBridge {
       savedAccount = id.account;
       ephemerisUrl = id.ephemerisUrl;
     } catch (_) {}
+    if (ephemerisUrl.trim().isEmpty) ephemerisUrl = injectedEphemerisUrl;
     // 星历地址必须在 onReady 之前落到原生层，否则握手时取不到、要等下一轮连接
     await _method.invokeMethod('set_ephemeris_url', {'url': ephemerisUrl});
     final effectiveAccount = (account ?? '').trim().isNotEmpty
@@ -981,6 +981,12 @@ class WatchBridge {
       await _method.invokeMethod('disconnect');
     } catch (_) {}
     state.value = 'disconnected';
+  }
+
+  Future<void> reauthenticate() async {
+    await VitaloopApi.readyFuture;
+    await _ensureListen();
+    await _method.invokeMethod('reauthenticate');
   }
 
   Future<void> syncNow() async {

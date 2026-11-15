@@ -1025,6 +1025,7 @@ class Profile {
   final double weightKg;
   final String birthDate;
   final String email;
+  final String avatar;
 
   const Profile({
     required this.nickname,
@@ -1033,6 +1034,7 @@ class Profile {
     required this.weightKg,
     required this.birthDate,
     required this.email,
+    required this.avatar,
   });
 
   @override
@@ -1042,7 +1044,8 @@ class Profile {
       heightCm.hashCode ^
       weightKg.hashCode ^
       birthDate.hashCode ^
-      email.hashCode;
+      email.hashCode ^
+      avatar.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1054,7 +1057,8 @@ class Profile {
           heightCm == other.heightCm &&
           weightKg == other.weightKg &&
           birthDate == other.birthDate &&
-          email == other.email;
+          email == other.email &&
+          avatar == other.avatar;
 }
 
 class ReadinessBaseline {

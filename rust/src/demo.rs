@@ -403,8 +403,8 @@ pub fn seed_demo() -> Result<()> {
         )?;
 
         tx.execute(
-            "INSERT OR REPLACE INTO profile(id, nickname, gender, height_cm, weight_kg, birth_date, email)
-             VALUES(1, 'Awen', 'male', 175, 64.8, '1992-04-18', 'hi@example.com')",
+            "INSERT OR REPLACE INTO profile(id, nickname, gender, height_cm, weight_kg, birth_date, email, avatar)
+             VALUES(1, 'Awen', 'male', 175, 64.8, '1992-04-18', 'hi@example.com', '')",
             [],
         )?;
 

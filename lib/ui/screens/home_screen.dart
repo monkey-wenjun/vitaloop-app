@@ -525,7 +525,9 @@ class _HomeScreenState extends State<HomeScreen> {
             background: v.green,
             foreground: v.greenInk,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => EcgScreen(records: state.ecg)),
+              MaterialPageRoute(
+                builder: (_) => HeartRhythmScreen(records: state.arrhythmia),
+              ),
             ),
           );
         case 'ecg':
@@ -542,9 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
             background: v.pink,
             foreground: v.heartInk,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => HeartRhythmScreen(records: state.arrhythmia),
-              ),
+              MaterialPageRoute(builder: (_) => EcgScreen(records: state.ecg)),
             ),
           );
         default:

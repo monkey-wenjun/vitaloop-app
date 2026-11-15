@@ -9,6 +9,7 @@ import '../theme/tokens.dart';
 import '../util/coordinate.dart';
 import '../util/km_markers.dart';
 import '../util/map_bearing.dart';
+import 'map_layer_sheet.dart';
 
 class PmtilesRouteMap extends StatefulWidget {
   const PmtilesRouteMap({
@@ -62,6 +63,8 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
 
   /// 前进方向（正北 0°，顺时针）。跟随时让车头朝上。
   double _bearing = 0;
+  /// 已经应用到原生地图的俯仰角，避免每次重建都重放一次动画。
+  double _appliedPitch = 0;
 
   /// 已经画在图上的标注。实时页每秒都会重建地图组件，如果每次都
   /// clearLines / clearCircles / clearSymbols 再重新添加，线会消失一帧，
@@ -115,6 +118,24 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    MapDisplaySettings.instance.addListener(_onDisplayChanged);
+  }
+
+  @override
+  void dispose() {
+    MapDisplaySettings.instance.removeListener(_onDisplayChanged);
+    super.dispose();
+  }
+
+  /// 图层开关会重建地图实例；俯仰角不重建，直接动相机更顺。
+  void _onDisplayChanged() {
+    if (!mounted) return;
+    _applyPitch();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final settings = MapDisplaySettings.instance;
     final night = Theme.of(context).brightness == Brightness.dark;
@@ -128,16 +149,25 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
         height: widget.height,
         width: double.infinity,
         child: ml.MapLibreMap(
-          key: ValueKey('${settings.pmtilesUrl}|$night|${widget.showBaseMap}'),
+          key: ValueKey(
+            '${settings.pmtilesUrl}|$night|${widget.showBaseMap}'
+            '|${settings.showTerrain ? settings.effectiveDemUrl : ''}'
+            '|${settings.showContours ? settings.effectiveContourUrl : ''}',
+          ),
           styleString: pmtilesMapStyleJson(
             sourceUrl: sourceUrl,
             night: night,
             showBaseMap: widget.showBaseMap,
+            demUrl: settings.showTerrain ? settings.effectiveDemUrl : '',
+            contourUrl: settings.showContours
+                ? settings.effectiveContourUrl
+                : '',
           ),
           initialCameraPosition: const ml.CameraPosition(
             target: ml.LatLng(30.2741, 120.1551),
             zoom: 10.5,
           ),
+          tiltGesturesEnabled: true,
           compassEnabled: false,
           scaleControlEnabled: true,
           logoEnabled: false,
@@ -153,14 +183,18 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
           onMapCreated: (controller) {
             _controller = controller;
             _styleReady = false;
+            // 新实例是正俯视，强制把设置里的俯仰再应用一次。
+            _appliedPitch = 0;
             // 新地图实例上旧的标注引用全部失效。
             _resetAnnotations();
+            _applyPitch();
           },
           onStyleLoadedCallback: () {
             _styleReady = true;
             _resetAnnotations();
             _needsInitialFit = true;
             _sync();
+            _applyPitch();
           },
           onMapClick: (_, latLng) {
             final (lat, lon) = Coordinate.wgs84ToGcj02(
@@ -169,6 +203,12 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
             );
             widget.onTapPoint?.call(lat, lon);
           },
+          onMapLongClick: (_, _) => showMapLayerSheet(
+            context,
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
         ),
       ),
     );
@@ -254,6 +294,19 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
     _markerTrackLength = 0;
     _markerTrackFirst = null;
     _appliedSignature = '';
+  }
+
+  /// 立体视角只由设置决定；用户手指乱转不会把地图转歪。
+  void _applyPitch() {
+    final controller = _controller;
+    if (controller == null) return;
+    final pitch = MapDisplaySettings.instance.pitch;
+    if ((_appliedPitch - pitch).abs() < 0.5) return;
+    _appliedPitch = pitch;
+    controller.animateCamera(
+      ml.CameraUpdate.tiltTo(pitch),
+      duration: const Duration(milliseconds: 400),
+    );
   }
 
   Future<void> _sync() async {
@@ -530,6 +583,7 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
             target: ml.LatLng(current.dx, current.dy),
             zoom: 16,
             bearing: _bearing,
+            tilt: MapDisplaySettings.instance.pitch,
           ),
         ),
         duration: const Duration(milliseconds: 250),
@@ -586,6 +640,9 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
       ),
       duration: const Duration(milliseconds: 300),
     );
+    // newLatLngBounds 会把俯仰压回 0，拟合完再把立体视角补回来。
+    _appliedPitch = 0;
+    _applyPitch();
   }
 
   Offset? get _currentWgs84 {

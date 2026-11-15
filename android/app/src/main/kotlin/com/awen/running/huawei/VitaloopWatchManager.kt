@@ -96,6 +96,7 @@ import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetE
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetExpandCapabilityRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetHiChainRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetLinkParamsRequest
+import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetPincodeRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetProductInformationRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetSecurityNegotiationRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.GetSettingRelatedRequest
@@ -318,8 +319,8 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             latestHeartRateTime = 0
         }
 
-        @Volatile
-        private var singleton: VitaloopWatchManager? = null
+    @Volatile
+    private var singleton: VitaloopWatchManager? = null
 
         val shared: VitaloopWatchManager? get() = singleton
 
@@ -360,6 +361,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     private var macAddress = ""
     private var connectThread: Thread? = null
     @Volatile private var connectGeneration = 0
+    @Volatile private var reauthPending = false
     private var syncThread: Thread? = null
     private var p2pThread: Thread? = null
     @Volatile private var syncing = false
@@ -631,6 +633,9 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         account: String = "",
         huaweiAddress: String = "",
     ) {
+        if (reauthPending) {
+            GBApplication.getDeviceSpecificSharedPrefs(address).edit().remove("authkey").apply()
+        }
         if (connectThread?.isAlive == true) {
             Log.i(TAG, "已有连接流程在跑，忽略重复连接 $address")
             return
@@ -740,6 +745,9 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
 
     fun disconnect() {
         userInitiatedDisconnect = true
+        if (reauthPending) {
+            userInitiatedDisconnect = false
+        }
         wearThread?.interrupt()
         wearThread = null
         wearQueryInFlight = false
@@ -816,6 +824,17 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             "ready" -> if (transport != null) syncOnce()
             "connecting", "authenticating", "configuring" -> Unit
             else -> connect(saved.address, saved.name)
+        }
+    }
+
+    @Synchronized
+    fun forceReauthentication() {
+        reauthPending = true
+        lastEcgFileSyncAt = 0
+        if (connectThread?.isAlive == true) {
+            disconnect()
+        } else {
+            savedWatch()?.let { connect(it.address, it.name) }
         }
     }
 
@@ -2282,7 +2301,17 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                         val securityNegoReq = GetSecurityNegotiationRequest(this@VitaloopWatchManager)
                         securityNegoReq.setFinalizeReq(object : Request.RequestCallback() {
                             override fun call() {
-                                startHiChain(securityNegoReq.authType)
+                                if (firstConnection) {
+                                    val pincodeReq = GetPincodeRequest(this@VitaloopWatchManager)
+                                    pincodeReq.setFinalizeReq(object : Request.RequestCallback() {
+                                        override fun call() {
+                                            startHiChain(securityNegoReq.authType)
+                                        }
+                                    })
+                                    perform(pincodeReq, "配对 PIN")
+                                } else {
+                                    startHiChain(securityNegoReq.authType)
+                                }
                             }
                         })
                         perform(securityNegoReq, "安全协商")
@@ -2847,6 +2876,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         lastStressFileSyncAt = 0
         lastSleepFileSyncAt = 0
         lastSleepDetailSyncAt = 0
+        lastEcgFileSyncAt = 0
         addLog("手动重同步：回看最近 $span 天")
         syncOnce()
     }
@@ -5178,8 +5208,9 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                 hrCount++
                 if (bpm > sampleMax) sampleMax = bpm
             }
-            val alt = d.altitude
-            if (alt != null && alt > 0) altArr.put(JSONObject().put("alt", alt))
+            // 手表逐点海拔是分米（见 Linkage.kt 的 50004286 实测），落库统一用米。
+            val alt = d.altitude?.takeIf { it > 0 }?.let { Math.round(it / 10.0).toInt() }
+            if (alt != null) altArr.put(JSONObject().put("alt", alt))
             val rawStepRate = d.stepRate.toInt() and 0xFF
             val stepRate = if (rawStepRate > 0) {
                 (rawStepRate * 60 + intervalSec / 2) / intervalSec
@@ -5297,8 +5328,8 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             .put("anaerobic", p.workoutAnaerobicEffect.toInt())
             .put("recovery", p.recoveryTime.toInt())
             .put("max_met", p.maxMET)
-            .put("elevation_gain", p.elevationGain ?: 0)
-            .put("elevation_loss", p.elevationLoss ?: 0)
+            .put("elevation_gain", p.elevationGain?.let { Math.round(it / 10.0).toInt() } ?: 0)
+            .put("elevation_loss", p.elevationLoss?.let { Math.round(it / 10.0).toInt() } ?: 0)
             .put("avg_hr", avgHr)
             .put("max_hr", maxHr)
             .put("samples", hrArr)
@@ -5313,8 +5344,8 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             .put("alg_type", p.algType.toInt() and 0xFF)
         if (extendObj.length() > 0) obj.put("stat_extend", extendObj)
         if (paceZones.length() > 0) obj.put("run_pace_zones", paceZones)
-        p.maxAltitude?.let { obj.put("max_altitude", it) }
-        p.minAltitude?.let { obj.put("min_altitude", it) }
+        p.maxAltitude?.let { obj.put("max_altitude", Math.round(it / 10.0).toInt()) }
+        p.minAltitude?.let { obj.put("min_altitude", Math.round(it / 10.0).toInt()) }
         emit(obj)
         addLog("运动记录 #${p.number}：类型=${p.type} 距离=${p.distance}m 时长=${p.duration}s 采样=${hrArr.length()}")
     }

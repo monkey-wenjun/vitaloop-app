@@ -586,6 +586,21 @@ class _WatchScreenState extends State<WatchScreen> {
                       onTap: _scanningBonded ? null : _scanBonded,
                     ),
                     VRowItem(
+                      icon: Icons.key_off_rounded,
+                      iconBackground: v.tintPeach,
+                      iconColor: v.warnInk,
+                      title: '重新认证',
+                      subtitle: '清除旧密钥后重新配对，手表上需确认',
+                      showChevron: true,
+                      onTap: () async {
+                        await WatchBridge.instance.reauthenticate();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('已发起重新认证，请在手表上确认配对')),
+                        );
+                      },
+                    ),
+                    VRowItem(
                       icon: Icons.history_rounded,
                       iconBackground: v.tintPeach,
                       iconColor: v.warnInk,

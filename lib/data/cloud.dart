@@ -15,6 +15,13 @@ class CloudAccount {
   final String token;
 }
 
+class CloudProfile {
+  const CloudProfile({required this.nickname, required this.avatar});
+
+  final String nickname;
+  final String avatar;
+}
+
 class CloudException implements Exception {
   const CloudException(this.message, {this.status});
 
@@ -28,12 +35,18 @@ class CloudException implements Exception {
 /// 可选账号云同步。公开构建不内置服务器；私有构建可通过
 /// `--dart-define=VITALOOP_CLOUD_URL=...` 注入。
 class CloudApi {
-  static const defaultBase = String.fromEnvironment('VITALOOP_CLOUD_URL');
+  static const defaultBase = String.fromEnvironment(
+    'VITALOOP_CLOUD_URL',
+    defaultValue: '',
+  );
   static String base = defaultBase;
   static const _timeout = Duration(seconds: 20);
   // 健康快照动辄 9 MB+，手机网络上 20 秒根本传不完；超时强断会让服务端只收到
   // 半截 body（旧版服务端还会把它落盘成损坏 JSON）。
   static const _transferTimeout = Duration(minutes: 3);
+  /// 本机落库的手表海拔已是米；上传时告诉服务端不要再按分米换算。
+  static const altitudeUnitHeader = 'X-Awen-Altitude-Unit';
+  static const altitudeUnitVersion = '14';
 
   static String normalizeBase(String raw) {
     var value = raw.trim();
@@ -51,6 +64,33 @@ class CloudApi {
 
   static Future<CloudAccount> login(String email, String password) =>
       _auth('/v1/account/login', email, password);
+
+  static Future<void> resetBegin(String email) async {
+    await _request('POST', '/v1/account/reset/begin', body: {'email': email});
+  }
+
+  static Future<CloudAccount> resetConfirm(
+    String email,
+    String code,
+    String newPassword,
+  ) async {
+    final body = await _request(
+      'POST',
+      '/v1/account/reset/confirm',
+      body: {'email': email, 'code': code, 'new_password': newPassword},
+    );
+    final map = jsonDecode(body) as Map<String, dynamic>;
+    final token = map['token'] as String? ?? '';
+    final id = map['account_id'] as String? ?? '';
+    if (token.isEmpty || id.isEmpty) {
+      throw const CloudException('服务器没有返回登录会话');
+    }
+    return CloudAccount(
+      accountId: id,
+      email: map['email'] as String? ?? email,
+      token: token,
+    );
+  }
 
   static Future<CloudAccount> _auth(
     String path,
@@ -89,7 +129,11 @@ class CloudApi {
     return body;
   }
 
-  static Future<void> upload(String token, String snapshot) async {
+  static Future<void> upload(
+    String token,
+    String snapshot, {
+    bool force = false,
+  }) async {
     // 健康快照 12MB+，走 Cloudflare 隧道要 ~3 分钟，会被 100 秒代理上限掐断。
     // gzip 后约 1/8，20 秒内能传完；服务端原样存压缩字节。
     // 首次登录的快照可能 80MB+，gzip 放在 isolate 里做，避免卡住 UI 线程。
@@ -98,10 +142,13 @@ class CloudApi {
     );
     await _request(
       'PUT',
-      '/v1/health/data',
+      force ? '/v1/health/data?force=1' : '/v1/health/data',
       token: token,
       rawBytes: compressed,
-      extraHeaders: const {'Content-Encoding': 'gzip'},
+      extraHeaders: const {
+        'Content-Encoding': 'gzip',
+        altitudeUnitHeader: altitudeUnitVersion,
+      },
       timeout: _transferTimeout,
     );
   }
@@ -113,6 +160,7 @@ class CloudApi {
       '/v1/health/delta',
       token: token,
       rawBody: delta,
+      extraHeaders: const {altitudeUnitHeader: altitudeUnitVersion},
       timeout: _transferTimeout,
     );
   }
@@ -126,6 +174,28 @@ class CloudApi {
       token: token,
       body: block,
       timeout: _transferTimeout,
+    );
+  }
+
+  static Future<CloudProfile> profile(String token) async {
+    final body = await _request('GET', '/v1/account/profile', token: token);
+    final map = jsonDecode(body) as Map<String, dynamic>;
+    return CloudProfile(
+      nickname: map['nickname'] as String? ?? '',
+      avatar: map['avatar'] as String? ?? '',
+    );
+  }
+
+  static Future<void> saveProfile(
+    String token,
+    String nickname,
+    String avatar,
+  ) async {
+    await _request(
+      'PUT',
+      '/v1/account/profile',
+      token: token,
+      body: {'nickname': nickname, 'avatar': avatar},
     );
   }
 
@@ -241,7 +311,11 @@ class CloudApi {
       'invalid email' => '邮箱格式不正确',
       'missing email' => '请输入邮箱',
       'missing password' => '请输入密码',
+      'missing code' => '请输入重置码',
+      'missing new_password' => '请输入新密码',
+      'bad reset code' => '重置码不正确或已过期',
       _ => raw,
     };
   }
 }
+

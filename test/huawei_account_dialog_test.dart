@@ -42,13 +42,13 @@ void main() {
     await tester.enterText(find.byType(TextField), 'bad account');
     await tester.tap(find.text('连接'));
     await tester.pump();
-    expect(find.text('华为账号不能包含空格'), findsOneWidget);
+    expect(find.text('华为账号 ID 是 17 位数字，不是邮箱'), findsOneWidget);
     expect(result, isNull);
 
-    await tester.enterText(find.byType(TextField), 'hi@example.com');
+    await tester.enterText(find.byType(TextField), '26008600023253412');
     await tester.tap(find.text('连接'));
     await tester.pumpAndSettle();
-    expect(result, 'hi@example.com');
+    expect(result, '26008600023253412');
     expect(find.byType(AlertDialog), findsNothing);
   });
 }

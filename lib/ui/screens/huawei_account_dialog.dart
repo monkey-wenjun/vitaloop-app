@@ -55,8 +55,8 @@ class _HuaweiAccountDialogState extends State<_HuaweiAccountDialog> {
     final account = _controller.text.trim();
     final error = account.isEmpty
         ? tr('请输入手表绑定的华为账号')
-        : RegExp(r'\s').hasMatch(account)
-        ? tr('华为账号不能包含空格')
+        : !RegExp(r'^\d{17}$').hasMatch(account)
+        ? tr('华为账号 ID 是 17 位数字，不是邮箱')
         : null;
     if (error != null) {
       setState(() => _error = error);
@@ -90,14 +90,14 @@ class _HuaweiAccountDialogState extends State<_HuaweiAccountDialog> {
             onSubmitted: (_) => _submit(),
             decoration: InputDecoration(
               labelText: tr('手表绑定的华为账号'),
-              hintText: tr('例如 hi@example.com'),
+              hintText: tr('例如 20007000023812345'),
               errorText: _error,
               border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 10),
           Text(
-            '首次连接会走 HiChain 配对；如果手表弹出确认，请在手表上点允许。',
+            '填华为账号 ID（17 位数字）。在华为健康 shared_prefs/login_data.xml 的 old_user_id 里获取；不要卸载前解绑官方 App。',
             style: VText.label.copyWith(color: v.muted, height: 1.5),
           ),
         ],

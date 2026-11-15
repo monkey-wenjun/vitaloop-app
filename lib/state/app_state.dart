@@ -309,6 +309,7 @@ class AppState extends ChangeNotifier {
       await VitaloopApi.setSetting('account_email', account.email);
       await VitaloopApi.setSetting('cloud_account_id', account.accountId);
       await VitaloopApi.setSetting('cloud_token', account.token);
+      await _pullCloudProfile(account.token);
       _ensureCloudAutoSync();
       await _syncCloudNow();
     } catch (e) {
@@ -330,9 +331,39 @@ class AppState extends ChangeNotifier {
           weightKg: current.weightKg,
           birthDate: current.birthDate,
           email: email,
+          avatar: current.avatar,
         ),
       );
       profile = await VitaloopApi.profile();
+    }
+  }
+
+  Future<void> resetPassword(
+    String email, {
+    required String code,
+    required String newPassword,
+  }) async {
+    cloudBusy = true;
+    cloudStatus = '正在重置密码…';
+    notifyListeners();
+    try {
+      final account = await CloudApi.resetConfirm(email, code, newPassword);
+      signedIn = true;
+      accountEmail = account.email;
+      _cloudToken = account.token;
+      await VitaloopApi.setSetting('signed_in', '1');
+      await VitaloopApi.setSetting('account_email', account.email);
+      await VitaloopApi.setSetting('cloud_account_id', account.accountId);
+      await VitaloopApi.setSetting('cloud_token', account.token);
+      await _pullCloudProfile(account.token);
+      _ensureCloudAutoSync();
+      await _syncCloudNow();
+    } catch (e) {
+      cloudStatus = e.toString();
+      rethrow;
+    } finally {
+      cloudBusy = false;
+      notifyListeners();
     }
   }
 
@@ -357,6 +388,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> signOut() async {
     _stopCloudAutoSync();
+    try {
+      await _syncCloudNow();
+    } catch (_) {
+      // 退出时不上传不能阻塞退出；下次登录或定时同步仍会补传。
+    }
     signedIn = false;
     accountEmail = null;
     _cloudToken = null;
@@ -404,6 +440,29 @@ class AppState extends ChangeNotifier {
       try {
         _cloudChangeBase = await VitaloopApi.accountDataChangeCount();
       } catch (_) {}
+      notifyListeners();
+    }
+  }
+
+  /// 手动「从云端恢复」：强制重新下载云端快照并合并进本机，然后把并集传回。
+  /// 换机/重装后本地数据不全时用它，不必退出登录再登录。
+  Future<void> restoreFromCloud() async {
+    final token = _cloudToken;
+    if (!signedIn || token == null || token.isEmpty) {
+      throw const CloudException('请先登录云端账号');
+    }
+    if (cloudBusy) return;
+    cloudBusy = true;
+    cloudStatus = '正在从云端恢复…';
+    notifyListeners();
+    try {
+      await _syncCloudNow(mergeRemote: true);
+      cloudStatus = '已从云端恢复';
+    } catch (e) {
+      cloudStatus = e.toString();
+      rethrow;
+    } finally {
+      cloudBusy = false;
       notifyListeners();
     }
   }
@@ -483,7 +542,23 @@ class AppState extends ChangeNotifier {
     debugPrint(
       '[cloud] full export done ${sw.elapsedMilliseconds}ms bytes=${snapshot.length}',
     );
-    await CloudApi.upload(token, snapshot);
+    try {
+      await CloudApi.upload(token, snapshot);
+    } on CloudException catch (e) {
+      // 服务端发现新快照比云端少很多（典型场景：重装后本地空库）会返回 409。
+      // 这时不能强行覆盖，先把云端拉回来合并，再传一次并集。
+      if (e.status != 409) rethrow;
+      debugPrint('[cloud] full upload rejected (409): ${e.message}');
+      cloudStatus = '云端数据更完整，正在合并…';
+      notifyListeners();
+      final remote = await CloudApi.download(token);
+      if (remote == null) rethrow;
+      await VitaloopApi.importAccountData(payload: remote);
+      await refresh();
+      final merged = await VitaloopApi.exportAccountData();
+      debugPrint('[cloud] merged export bytes=${merged.length}');
+      await CloudApi.upload(token, merged);
+    }
     await VitaloopApi.clearAccountDelta(throughSeq: seq);
     await VitaloopApi.setSetting('cloud_sync_seq', seq.toString());
   }
@@ -530,6 +605,11 @@ class AppState extends ChangeNotifier {
         }
         break;
       }
+      if (delta.contains('"deletes":[[')) {
+        debugPrint('[cloud] delete delta detected, full snapshot fallback');
+        await _uploadFullSnapshot(token, sw);
+        return;
+      }
       debugPrint(
         '[cloud] delta chunk ${round + 1} ${sw.elapsedMilliseconds}ms '
         'bytes=${delta.length} seq=$cursor..$deltaMax',
@@ -546,6 +626,38 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> saveProfile(Profile next) async {
+    await VitaloopApi.saveProfile(next);
+    profile = next;
+    notifyListeners();
+    if (signedIn && _cloudToken?.isNotEmpty == true) {
+      try {
+        await CloudApi.saveProfile(
+          _cloudToken!,
+          next.nickname,
+          next.avatar,
+        );
+        cloudStatus = '云端已同步';
+      } catch (e) {
+        cloudStatus = '个人资料云同步失败：$e';
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> _pullCloudProfile(String token) async {
+    final cloudProfile = await CloudApi.profile(token);
+    final current = profile ?? await VitaloopApi.profile();
+    final next = Profile(
+      nickname: cloudProfile.nickname.isNotEmpty
+          ? cloudProfile.nickname
+          : current.nickname,
+      gender: current.gender,
+      heightCm: current.heightCm,
+      weightKg: current.weightKg,
+      birthDate: current.birthDate,
+      email: current.email,
+      avatar: cloudProfile.avatar,
+    );
     await VitaloopApi.saveProfile(next);
     profile = next;
     notifyListeners();

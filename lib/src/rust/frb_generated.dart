@@ -3964,8 +3964,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Profile dco_decode_profile(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return Profile(
       nickname: dco_decode_String(arr[0]),
       gender: dco_decode_String(arr[1]),
@@ -3973,6 +3973,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       weightKg: dco_decode_f_64(arr[3]),
       birthDate: dco_decode_String(arr[4]),
       email: dco_decode_String(arr[5]),
+      avatar: dco_decode_String(arr[6]),
     );
   }
 
@@ -5509,6 +5510,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_weightKg = sse_decode_f_64(deserializer);
     var var_birthDate = sse_decode_String(deserializer);
     var var_email = sse_decode_String(deserializer);
+    var var_avatar = sse_decode_String(deserializer);
     return Profile(
       nickname: var_nickname,
       gender: var_gender,
@@ -5516,6 +5518,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       weightKg: var_weightKg,
       birthDate: var_birthDate,
       email: var_email,
+      avatar: var_avatar,
     );
   }
 
@@ -6977,6 +6980,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_f_64(self.weightKg, serializer);
     sse_encode_String(self.birthDate, serializer);
     sse_encode_String(self.email, serializer);
+    sse_encode_String(self.avatar, serializer);
   }
 
   @protected

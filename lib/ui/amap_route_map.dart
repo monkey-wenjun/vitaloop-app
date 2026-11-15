@@ -9,9 +9,11 @@ import '../data/amap_tile_cache.dart';
 import '../data/amap_tiles.dart';
 import '../data/map_display.dart';
 import '../data/map_offline_service.dart';
+import '../data/opentopo_tiles.dart';
 import '../theme/tokens.dart';
 import '../util/coordinate.dart';
 import '../util/map_bearing.dart';
+import 'map_layer_sheet.dart';
 import 'pmtiles_route_map.dart';
 
 /// 高德栅格瓦片地图，叠加本地轨迹。
@@ -88,6 +90,11 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
   static const _minZoom = 3.0;
   static const _maxZoom = 17.0;
 
+  /// 底图是不是等高线地形。等高线瓦片本身就是 WGS-84，不需要 GCJ-02 偏移；
+  /// 高德是 GCJ-02，两者必须分开算，否则轨迹会整体偏移几百米。
+  bool get _terrain =>
+      MapDisplaySettings.instance.provider == MapBaseProvider.opentopo;
+
   /// 高德亮色瓦片 → 夜间蓝灰地图。只作用于底图，轨迹和起终点仍保持原色。
   /// 先把亮色反相，再压到蓝灰色；透明区域仍保持透明，露出页面底色。
   static const _nightMapFilter = ColorFilter.matrix(<double>[
@@ -156,10 +163,12 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
   int _fittedTargetCount = 0;
   Offset? _fittedTargetFirst;
   Offset? _fittedTargetLast;
+  MapBaseProvider? _lastProvider;
 
   @override
   void initState() {
     super.initState();
+    _lastProvider = MapDisplaySettings.instance.provider;
     MapDisplaySettings.instance.addListener(_onDisplaySettingsChanged);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _scheduleCityDownload(),
@@ -174,13 +183,32 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
 
   void _onDisplaySettingsChanged() {
     if (!mounted) return;
+    final provider = MapDisplaySettings.instance.provider;
+    final providerChanged = provider != _lastProvider;
+    _lastProvider = provider;
     _displayPointsCache = null;
     _validPointsCache = null;
     _routeGeometry = null;
+    _displayTargetPointsCache = null;
+    _validTargetPointsCache = null;
+    _targetRouteGeometry = null;
+    _displaySupplyPointsCache = null;
     _fittedPointCount = 0;
     _fittedFirst = null;
     _fittedLast = null;
     _fittedCurrent = null;
+    _fittedTargetActive = false;
+    _fittedTargetCount = 0;
+    _fittedTargetFirst = null;
+    _fittedTargetLast = null;
+    if (providerChanged) {
+      // 换底图会换坐标系（高德 GCJ-02 ↔ 等高线 WGS-84），机位要重新拟合，
+      // 否则从高德切到等高线后，相机还停在上一次偏移过的位置。
+      _zoom = null;
+      _center = null;
+      _fitScheduled = false;
+      _userMoved = false;
+    }
     setState(() {});
     _scheduleCityDownload();
   }
@@ -192,6 +220,8 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
   void _scheduleCityDownload() {
     final settings = MapDisplaySettings.instance;
     if (!settings.showBaseMap || !settings.offlineCityEnabled) return;
+    // OpenTopoMap 的使用条款禁止批量预下载瓦片，等高线底图只做浏览缓存。
+    if (settings.provider == MapBaseProvider.opentopo) return;
     final point = widget.currentPoint;
     if (point == null || !point.dx.isFinite || !point.dy.isFinite) return;
     unawaited(
@@ -384,6 +414,7 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
                       // 没有 key 时每次重建都换一个 provider：整屏瓦片重新解析、
                       // 重新解码，配合 gaplessPlayback 就是一直在刷图。
                       key: ValueKey(
+                        '${_terrain ? 'topo' : 'amap'}'
                         '${v.isDark ? 'd' : 'l'}'
                         '${MapDisplaySettings.instance.showLabels ? 'l' : 'n'}'
                         '/$tileZoom/${tile.dx.toInt()}/${tile.dy.toInt()}',
@@ -505,14 +536,24 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
                         children: [
                           if (MapDisplaySettings.instance.showBaseMap)
                             Positioned.fill(
-                              child: v.isDark
+                              // 等高线地形没有夜间瓦片，反相会把等高线糊成一片，
+                              // 深色主题下只压暗一点，保留山脊线可读性。
+                              child: v.isDark && !_terrain
                                   ? ColorFiltered(
                                       colorFilter: _nightMapFilter,
                                       child: tileLayer,
                                     )
+                                  : v.isDark
+                                  ? ColorFiltered(
+                                      colorFilter: const ColorFilter.mode(
+                                        Color(0x59000000),
+                                        BlendMode.darken,
+                                      ),
+                                      child: tileLayer,
+                                    )
                                   : tileLayer,
                             ),
-                          if (!v.isDark)
+                          if (!v.isDark && !_terrain)
                             Positioned.fill(
                               child: IgnorePointer(
                                 child: ColoredBox(
@@ -548,7 +589,7 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
                       bottom: 6,
                       child: IgnorePointer(
                         child: Text(
-                          '© 高德地图',
+                          _terrain ? opentopoAttribution : '© 高德地图',
                           style: TextStyle(
                             fontSize: 8,
                             color: v.isDark
@@ -602,7 +643,7 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
   List<Offset> get _displayPoints {
     final cached = _displayPointsCache;
     if (cached != null) return cached;
-    final points = widget.wgs84
+    final points = widget.wgs84 && !_terrain
         ? [for (final p in widget.points) _toGcj(p)]
         : widget.points;
     _displayPointsCache = points;
@@ -611,7 +652,9 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
 
   Offset? get _displayCurrentPoint {
     final p = widget.currentPoint;
-    if (p == null || !(widget.currentPointWgs84 ?? widget.wgs84)) return p;
+    if (p == null) return p;
+    if (_terrain) return p;
+    if (!(widget.currentPointWgs84 ?? widget.wgs84)) return p;
     return _toGcj(p);
   }
 
@@ -633,7 +676,7 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
   List<Offset> get _displayTargetPoints {
     final cached = _displayTargetPointsCache;
     if (cached != null) return cached;
-    final points = widget.targetPointsWgs84
+    final points = widget.targetPointsWgs84 && !_terrain
         ? [for (final p in widget.targetPoints) _toGcj(p)]
         : widget.targetPoints;
     _displayTargetPointsCache = points;
@@ -644,7 +687,7 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
     final cached = _displaySupplyPointsCache;
     if (cached != null) return cached;
     final points =
-        (widget.supplyPointsWgs84
+        (widget.supplyPointsWgs84 && !_terrain
                 ? [for (final p in widget.supplyPoints) _toGcj(p)]
                 : widget.supplyPoints)
             .where((p) => p.dx.abs() <= 85 && p.dy.abs() <= 180)
@@ -843,51 +886,16 @@ class _AmapRouteMapState extends State<AmapRouteMap> {
     return out;
   }
 
-  String _tileUrl(int x, int y, int z) =>
-      amapTileUrl(x, y, z, labels: MapDisplaySettings.instance.showLabels);
+  String _tileUrl(int x, int y, int z) => _terrain
+      ? opentopoTileUrl(x, y, z)
+      : amapTileUrl(x, y, z, labels: MapDisplaySettings.instance.showLabels);
 
-  Future<void> _showMapOptions(BuildContext context) async {
-    final settings = MapDisplaySettings.instance;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: const Text('显示地图底图'),
-                subtitle: const Text('关闭后只保留轨迹线，适合分享时隐藏位置'),
-                trailing: Switch(
-                  value: settings.showBaseMap,
-                  onChanged: (value) {
-                    settings.setShowBaseMap(value);
-                    setSheet(() {});
-                  },
-                ),
-              ),
-              ListTile(
-                enabled: settings.showBaseMap,
-                title: const Text('显示街道名称'),
-                subtitle: const Text('关闭后不显示路名、村庄和地点文字'),
-                trailing: Switch(
-                  value: settings.showLabels,
-                  onChanged: settings.showBaseMap
-                      ? (value) {
-                          settings.setShowLabels(value);
-                          setSheet(() {});
-                        }
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Future<void> _showMapOptions(BuildContext context) => showMapLayerSheet(
+    context,
+    onChanged: () {
+      if (mounted) setState(() {});
+    },
+  );
 
   /// 把屏幕向量按 [angle] 旋转；用于旋转地图后的点选/手势坐标换算。
   static Offset _rotateVector(Offset vector, double angle) {

@@ -4217,6 +4217,7 @@ impl SseDecode for crate::api::types::Profile {
         let mut var_weightKg = <f64>::sse_decode(deserializer);
         let mut var_birthDate = <String>::sse_decode(deserializer);
         let mut var_email = <String>::sse_decode(deserializer);
+        let mut var_avatar = <String>::sse_decode(deserializer);
         return crate::api::types::Profile {
             nickname: var_nickname,
             gender: var_gender,
@@ -4224,6 +4225,7 @@ impl SseDecode for crate::api::types::Profile {
             weight_kg: var_weightKg,
             birth_date: var_birthDate,
             email: var_email,
+            avatar: var_avatar,
         };
     }
 }
@@ -5565,6 +5567,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::types::Profile {
             self.weight_kg.into_into_dart().into_dart(),
             self.birth_date.into_into_dart().into_dart(),
             self.email.into_into_dart().into_dart(),
+            self.avatar.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6939,6 +6942,7 @@ impl SseEncode for crate::api::types::Profile {
         <f64>::sse_encode(self.weight_kg, serializer);
         <String>::sse_encode(self.birth_date, serializer);
         <String>::sse_encode(self.email, serializer);
+        <String>::sse_encode(self.avatar, serializer);
     }
 }
 

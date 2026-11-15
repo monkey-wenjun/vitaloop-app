@@ -18,6 +18,7 @@ void main() {
         weightKg: 68,
         birthDate: '1995-01-01',
         email: 'hi@example.com',
+        avatar: '',
       );
 
     await tester.pumpWidget(

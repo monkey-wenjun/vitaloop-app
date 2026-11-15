@@ -344,6 +344,7 @@ pub struct Profile {
     pub weight_kg: f64,
     pub birth_date: String,
     pub email: String,
+    pub avatar: String,
 }
 
 pub struct DeviceInfo {

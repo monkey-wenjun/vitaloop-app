@@ -39,6 +39,23 @@ class AmapTileCache {
     final root = await _rootDir();
     if (root == null) return null;
     final uri = Uri.tryParse(url);
+    // OpenTopoMap 是路径式 URL（/z/x/y.png），高德是查询参数式。
+    // 两种都要落盘，否则等高线底图每次进页面都重新下载。
+    if (uri != null && uri.queryParameters['z'] == null) {
+      final segments = uri.pathSegments;
+      if (segments.length >= 3) {
+        final z = int.tryParse(segments[segments.length - 3]);
+        final x = int.tryParse(segments[segments.length - 2]);
+        final y = int.tryParse(
+          segments.last.replaceFirst(RegExp(r'\.\w+$'), ''),
+        );
+        if (z != null && x != null && y != null) {
+          final host = uri.host.replaceAll(RegExp(r'[^A-Za-z0-9.-]'), '_');
+          return File('${root.path}/$host/$z/$x/$y.png');
+        }
+      }
+      return null;
+    }
     final z = int.tryParse(uri?.queryParameters['z'] ?? '');
     final x = int.tryParse(uri?.queryParameters['x'] ?? '');
     final y = int.tryParse(uri?.queryParameters['y'] ?? '');

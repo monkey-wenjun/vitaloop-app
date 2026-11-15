@@ -497,8 +497,10 @@ class WorkoutLiveTracker(
                     heartRate = intTag(0x04) ?: VitaloopWatchManager.latestHeartRate.takeIf { it > 0 },
                     calorieKcal = intTag(0x06),
                     distanceM = intTag(0x07),
-                    climb = intTag(0x05),
-                    altitude = intTag(0x08),
+                    // 手表这套运动度量里爬升/海拔是分米（和汇总包 0x0b/0x1c/0x1d
+                    // 同源），官方 App 不换算直接当米显示，所以它自己偏大 10 倍。
+                    climb = intTag(0x05)?.let { Math.round(it / 10.0).toInt() },
+                    altitude = intTag(0x08)?.let { Math.round(it / 10.0).toInt() },
                     startedAt = realtimeStartedAt,
                     lastFrameAt = now,
                     operatorType = lastOperatorType,
@@ -691,8 +693,8 @@ class WorkoutLiveTracker(
             heartRate = VitaloopWatchManager.latestHeartRate.takeIf { it > 0 } ?: previous?.heartRate,
             calorieKcal = packet.calories.takeIf { it >= 0 },
             distanceM = distance,
-            climb = packet.elevationGain,
-            altitude = packet.maxAltitude,
+            climb = packet.elevationGain?.let { Math.round(it / 10.0).toInt() },
+            altitude = packet.maxAltitude?.let { Math.round(it / 10.0).toInt() },
             startedAt = packet.startTime.toLong() * 1000L,
             lastFrameAt = now,
             operatorType = lastOperatorType,

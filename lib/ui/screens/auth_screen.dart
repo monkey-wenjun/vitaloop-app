@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide Text;
 import 'package:vitaloop/l10n/localized_text.dart';
 
+import '../../data/cloud.dart';
 import '../../state/app_state.dart';
 import '../../theme/tokens.dart';
 import '../components.dart';
@@ -17,12 +18,15 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   bool _register = false;
+  bool _reset = false;
   bool _obscure = true;
   bool _agreed = false;
   late final _email = TextEditingController(
     text: widget.state.accountEmail ?? '',
   );
   final _password = TextEditingController();
+  final _resetCode = TextEditingController();
+  final _newPassword = TextEditingController();
   late final _server = TextEditingController(text: widget.state.cloudServer);
   String? _error;
 
@@ -39,11 +43,18 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _onEmailChanged() => setState(() {});
 
+  void _toggleReset() => setState(() {
+    _reset = !_reset;
+    _error = null;
+  });
+
   @override
   void dispose() {
     _email.removeListener(_onEmailChanged);
     _email.dispose();
     _password.dispose();
+    _resetCode.dispose();
+    _newPassword.dispose();
     _server.dispose();
     super.dispose();
   }
@@ -102,12 +113,14 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 30),
             Text(
-              _register ? '创建账号' : '欢迎回来',
+              _reset ? '找回密码' : (_register ? '创建账号' : '欢迎回来'),
               style: VText.h1.copyWith(fontSize: 30, color: v.ink),
             ),
             const SizedBox(height: 6),
             Text(
-              _register
+              _reset
+                  ? '输入注册邮箱获取重置码，再设置新密码。重置成功后旧登录会全部失效。'
+                  : _register
                   ? '注册后健康数据会加密传输并同步到你的云端账号；不登录也能继续只用本机'
                   : '登录后把本机历史与后续手表数据同步到云端；不登录则全部只存本机',
               style: VText.meta.copyWith(color: v.muted, height: 1.5),
@@ -135,17 +148,38 @@ class _AuthScreenState extends State<AuthScreen> {
               trailing: _emailLooksValid ? Icons.check_circle_rounded : null,
               trailingColor: v.greenInk,
             ),
-            const SizedBox(height: 12),
-            _AuthField(
-              icon: Icons.lock_outline_rounded,
-              hint: '密码',
-              controller: _password,
-              obscure: _obscure,
-              trailing: _obscure
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              onTrailingTap: () => setState(() => _obscure = !_obscure),
-            ),
+            if (_reset) ...[
+              const SizedBox(height: 12),
+              _AuthField(
+                icon: Icons.password_rounded,
+                hint: '8 位数字重置码',
+                controller: _resetCode,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              _AuthField(
+                icon: Icons.lock_outline_rounded,
+                hint: '新密码（至少 8 位）',
+                controller: _newPassword,
+                obscure: _obscure,
+                trailing: _obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                onTrailingTap: () => setState(() => _obscure = !_obscure),
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              _AuthField(
+                icon: Icons.lock_outline_rounded,
+                hint: '密码',
+                controller: _password,
+                obscure: _obscure,
+                trailing: _obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                onTrailingTap: () => setState(() => _obscure = !_obscure),
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!, style: VText.label.copyWith(color: v.danger)),
@@ -156,12 +190,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 children: [
                   const Spacer(),
                   GestureDetector(
-                    onTap: () => _sheet(
-                      '忘记密码',
-                      '账号密码只用于云端登录，服务器保存的是加盐哈希，不保存明文。当前版本还没有自助重置入口；忘记后请在本机保留数据并在后续版本通过重置流程处理。',
-                    ),
+                    onTap: _toggleReset,
                     child: Text(
-                      '忘记密码',
+                      _reset ? '返回登录' : '忘记密码',
                       style: VText.label.copyWith(
                         color: v.blue,
                         fontWeight: FontWeight.w700,
@@ -237,8 +268,12 @@ class _AuthScreenState extends State<AuthScreen> {
             VPrimaryButton(
               label: widget.state.cloudBusy
                   ? '请稍候…'
+                  : _reset
+                  ? '重置密码并登录'
                   : (_register ? '注册并登录' : '登录'),
-              onTap: widget.state.cloudBusy ? null : _submit,
+              onTap: widget.state.cloudBusy
+                  ? null
+                  : (_reset ? _sendResetCode : _submit),
             ),
             const SizedBox(height: 18),
             Row(
@@ -265,18 +300,24 @@ class _AuthScreenState extends State<AuthScreen> {
             Center(
               child: GestureDetector(
                 onTap: () => setState(() {
-                  _register = !_register;
+                  if (_reset) {
+                    _reset = false;
+                  } else {
+                    _register = !_register;
+                  }
                   _error = null;
                 }),
                 child: Text.rich(
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: _register ? '已有账号？' : '还没有账号？',
+                        text: _reset
+                            ? '想起密码了？'
+                            : (_register ? '已有账号？' : '还没有账号？'),
                         style: VText.meta.copyWith(color: v.muted),
                       ),
                       TextSpan(
-                        text: _register ? ' 去登录' : ' 立即注册',
+                        text: _reset ? ' 去登录' : (_register ? ' 去登录' : ' 立即注册'),
                         style: VText.meta.copyWith(
                           color: v.blue,
                           fontWeight: FontWeight.w800,
@@ -355,6 +396,45 @@ class _AuthScreenState extends State<AuthScreen> {
         email,
         password: _password.text,
         register: _register,
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => AccountCenterScreen(state: widget.state),
+      ),
+    );
+  }
+
+  Future<void> _sendResetCode() async {
+    if (!_emailLooksValid) {
+      setState(() => _error = '请输入有效的邮箱地址');
+      return;
+    }
+    final code = _resetCode.text.trim();
+    if (code.length < 6) {
+      setState(() => _error = '请输入 8 位重置码');
+      return;
+    }
+    if (_newPassword.text.length < 8) {
+      setState(() => _error = '新密码至少 8 位');
+      return;
+    }
+    if (_server.text.trim().isEmpty) {
+      setState(() => _error = '请填写云端服务器地址');
+      return;
+    }
+    final email = _email.text.trim();
+    try {
+      await widget.state.setCloudServer(_server.text);
+      await CloudApi.resetBegin(email);
+      await widget.state.resetPassword(
+        email,
+        code: code,
+        newPassword: _newPassword.text,
       );
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -472,6 +552,19 @@ class AccountCenterScreen extends StatelessWidget {
                         value: state.cloudBusy ? '同步中' : null,
                         padding: const EdgeInsets.symmetric(vertical: 13),
                       ),
+                      if (signedIn)
+                        VRowItem(
+                          icon: Icons.cloud_download_rounded,
+                          iconBackground: v.tintSky,
+                          iconColor: v.skyInk,
+                          title: '从云端恢复',
+                          subtitle: '重新下载云端快照并与本机合并（换机/重装后用）',
+                          showChevron: true,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          onTap: state.cloudBusy
+                              ? null
+                              : () => _confirmRestore(context),
+                        ),
                     ],
                   ),
                 ),
@@ -519,6 +612,44 @@ class AccountCenterScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _confirmRestore(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ctx.v.surface,
+        title: Text('从云端恢复', style: VText.h2.copyWith(color: ctx.v.ink)),
+        content: Text(
+          '会重新下载云端快照并合并进本机，本机已有的记录不会被删除。'
+          '换机或重装后数据不全时用这个。',
+          style: VText.body.copyWith(color: ctx.v.ink2),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('开始恢复'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await state.restoreFromCloud();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已从云端恢复并合并')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('恢复失败：$e')));
+    }
   }
 
   Future<void> _confirmSignOut(BuildContext context) async {

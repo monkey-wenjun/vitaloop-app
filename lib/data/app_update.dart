@@ -109,6 +109,15 @@ class AppUpdateClient {
     }
   }
 
+  static Future<bool> openExternal(String url) async {
+    try {
+      return await _channel.invokeMethod<bool>('open_url', {'url': url}) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<AppUpdateInfo?> check({
     required int currentVersionCode,
     required String currentVersionName,

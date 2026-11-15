@@ -625,6 +625,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ? current.birthDate
             : _birth.text.trim(),
         email: current.email,
+        avatar: current.avatar,
       ),
     );
     if (mounted) Navigator.pop(context);
@@ -1188,6 +1189,33 @@ class _AboutScreenState extends State<AboutScreen> {
                     icon: Icons.code_rounded,
                     title: '开源许可',
                     subtitle: 'GNU AGPL-3.0',
+                  ),
+                  VRowItem(
+                    icon: Icons.person_rounded,
+                    iconBackground: v.tintGrey,
+                    iconColor: v.ink2,
+                    title: '作者',
+                    subtitle: '阿文 博客',
+                  ),
+                  VRowItem(
+                    icon: Icons.mail_rounded,
+                    iconBackground: v.tintBlue,
+                    iconColor: v.blueInk,
+                    title: '邮箱',
+                    subtitle: 'hi@awen.me',
+                    onTap: () =>
+                        AppUpdateClient.openExternal('mailto:hi@awen.me'),
+                    showChevron: true,
+                  ),
+                  VRowItem(
+                    icon: Icons.language_rounded,
+                    iconBackground: v.tintHeart,
+                    iconColor: v.heartInk,
+                    title: '博客',
+                    subtitle: 'www.awen.me',
+                    onTap: () =>
+                        AppUpdateClient.openExternal('https://www.awen.me'),
+                    showChevron: true,
                   ),
                   const VRowItem(
                     icon: Icons.favorite_rounded,

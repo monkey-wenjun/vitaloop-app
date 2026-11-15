@@ -386,6 +386,37 @@ pub fn import_account_data(payload: String) -> Result<usize> {
         .get("tables")
         .and_then(|v| v.as_object())
         .ok_or_else(|| anyhow::anyhow!("missing tables"))?;
+    // 快照里的海拔单位版本：v14 之前的手表数据是分米，直接导入会显示
+    // 放大 10 倍；拉回来后要再换算一次。新版本会在 settings 里带标记。
+    let snapshot_altitude_units = tables
+        .get("settings")
+        .and_then(|v| v.get("columns"))
+        .and_then(|v| v.as_array())
+        .zip(
+            tables
+                .get("settings")
+                .and_then(|v| v.get("rows"))
+                .and_then(|v| v.as_array()),
+        )
+        .and_then(|(columns, rows)| {
+            let key_index = columns.iter().position(|c| c.as_str() == Some("key"))?;
+            let value_index = columns.iter().position(|c| c.as_str() == Some("value"))?;
+            rows.iter().find_map(|row| {
+                let row = row.as_array()?;
+                (row.get(key_index)?.as_str()? == "altitude_unit_v")
+                    .then(|| {
+                        row.get(value_index)
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string)
+                    })
+                    .flatten()
+            })
+        });
+    let needs_altitude_fix =
+        snapshot_altitude_units.as_deref() != Some(store::altitude_unit_version());
+    // 快照没带 v14 标记时，里面 watch-* 行的海拔还是分米。换算必须在写入
+    // 这一刻做，只作用于云端带来的行：导入后再扫全表会把本机已经换算过的
+    // 行再除一次 10（云端快照里没有本机独有的行，本机行却会被扫到）。
     store::with_conn(|conn| {
         let tx = conn.unchecked_transaction()?;
         let mut imported = 0usize;
@@ -496,6 +527,7 @@ pub fn import_account_data(payload: String) -> Result<usize> {
             let Some(rows) = block.get("rows").and_then(|v| v.as_array()) else {
                 continue;
             };
+            let workout_col = |name: &str| columns.iter().position(|c| c == name);
             let key_index = columns.iter().position(|c| c == "key");
             for row in rows {
                 let Some(values) = row.as_array() else {
@@ -503,6 +535,44 @@ pub fn import_account_data(payload: String) -> Result<usize> {
                 };
                 if values.len() < columns.len() {
                     continue;
+                }
+                let mut values: Vec<JsonValue> = values.clone();
+                if needs_altitude_fix && *table == "workouts" {
+                    if let Some(id_col) = workout_col("id") {
+                        let is_watch = values[id_col]
+                            .as_str()
+                            .is_some_and(|id| id.starts_with("watch-"));
+                        if is_watch {
+                            if let Some(col) = workout_col("altitude_json") {
+                                if let Some(fixed) = values[col]
+                                    .as_str()
+                                    .and_then(|raw| store::scale_altitude_json(raw, "alt"))
+                                {
+                                    values[col] = JsonValue::String(fixed);
+                                }
+                            }
+                            if let Some(col) = workout_col("detail_json") {
+                                if let Some(fixed) = values[col]
+                                    .as_str()
+                                    .and_then(|raw| store::scale_altitude_json(raw, "altitude"))
+                                {
+                                    values[col] = JsonValue::String(fixed);
+                                }
+                            }
+                            for col_name in [
+                                "elevation_gain",
+                                "elevation_loss",
+                                "max_altitude",
+                                "min_altitude",
+                            ] {
+                                if let Some(col) = workout_col(col_name) {
+                                    if let Some(n) = values[col].as_f64() {
+                                        values[col] = json!((n / 10.0).round());
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 if *table == "settings" {
                     if let Some(idx) = key_index {
@@ -523,6 +593,15 @@ pub fn import_account_data(payload: String) -> Result<usize> {
         // 体脂秤一次上秤会拆成毫秒错开的多行，云端旧快照里也可能带着
         // 这些重复行。合并后只保留一条，避免同步一次多出几条。
         crate::legacy::dedupe_weights(&tx)?;
+        if needs_altitude_fix {
+            // 写入时触发器已经装好，换算后的行会自动进变更日志；这里只补
+            // 单位标记，别再手动插一遍。
+            store::mark_altitude_units(&tx, false)?;
+        }
+        // 云端可能带着 v14 标记，实际却还是被 6016 多除过一次的值（16 m）。
+        // 导入后按行内 GPS 轨迹再核一遍：只动比值明显异常的行走，已经是米
+        // 的行原样保留，所以重复同步是幂等的。
+        store::normalize_altitude_rows(&tx, false, store::AltitudeMode::Verify)?;
         // 旧版实时同步和手表重建可能把同一晚写成多条高度重叠的睡眠会话。
         // 云端快照原样带回后要先合并，否则每同步一次就多叠一层。
         crate::store::dedupe_sleep_session_rows(&tx)?;
@@ -896,5 +975,162 @@ mod tests {
 
         let _ = std::fs::remove_file(&source);
         let _ = std::fs::remove_file(&target);
+    }
+
+    #[test]
+    fn import_converts_decimetre_altitude_only_for_rows_from_snapshot() {
+        let _guard = store::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let source =
+            std::env::temp_dir().join(format!("vitaloop-cloud-alt-src-{}.db", std::process::id()));
+        let target =
+            std::env::temp_dir().join(format!("vitaloop-cloud-alt-dst-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&source);
+        let _ = std::fs::remove_file(&target);
+
+        // 云端快照是 v13 之前的手机传的：watch 行海拔仍是分米，且没有标记。
+        store::open(source.to_str().unwrap()).unwrap();
+        store::with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO workouts(
+                   id, source, sport, start_ms, end_ms, altitude_json, detail_json,
+                   elevation_gain, elevation_loss, max_altitude, min_altitude)
+                 VALUES('watch-29-1794711956', 'watch', 'hiking', 1000, 2000,
+                        '[{\"t\":1000,\"alt\":270},{\"t\":2000,\"alt\":1607}]',
+                        '{\"trkpt\":[{\"altitude\":326},{\"altitude\":1367}]}',
+                        2006, 1912, 1607, 270)",
+                [],
+            )?;
+            conn.execute(
+                "INSERT INTO workouts(
+                   id, source, sport, start_ms, end_ms, altitude_json,
+                   elevation_gain, elevation_loss, max_altitude, min_altitude)
+                 VALUES('legacy-40195', 'watch', 'hiking', 900000, 900001,
+                        '[{\"t\":1000,\"alt\":6},{\"t\":2000,\"alt\":119}]',
+                        450, 400, 119, 6)",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        let payload = strip_altitude_marker(export_account_data().unwrap());
+
+        // 本机已经升到 v14：本机独有的 watch 行早已是米，不能被二次除。
+        store::open(target.to_str().unwrap()).unwrap();
+        store::with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO workouts(
+                   id, source, sport, start_ms, end_ms, altitude_json,
+                   elevation_gain, elevation_loss, max_altitude, min_altitude)
+                 VALUES('watch-99-1800000000', 'watch', 'hiking', 5000, 6000,
+                        '[{\"t\":1000,\"alt\":27},{\"t\":2000,\"alt\":161}]',
+                        201, 191, 161, 27)",
+                [],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+        import_account_data(payload.clone()).unwrap();
+
+        let remote_row: (f64, f64, f64, f64, String) = store::with_conn(|conn| {
+            Ok(conn.query_row(
+                "SELECT elevation_gain, elevation_loss, max_altitude, min_altitude,
+                        altitude_json
+                 FROM workouts WHERE id='watch-29-1794711956'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )?)
+        })
+        .unwrap();
+        assert_eq!(
+            (remote_row.0, remote_row.1, remote_row.2, remote_row.3),
+            (201.0, 191.0, 161.0, 27.0)
+        );
+        assert!(remote_row.4.contains("\"alt\":161"));
+
+        let local_row: (f64, f64) = store::with_conn(|conn| {
+            Ok(conn.query_row(
+                "SELECT max_altitude, elevation_gain FROM workouts
+                 WHERE id='watch-99-1800000000'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?)
+        })
+        .unwrap();
+        assert_eq!(local_row, (161.0, 201.0), "本机已修正的行被二次除 10");
+
+        let legacy: (f64, String) = store::with_conn(|conn| {
+            Ok(conn.query_row(
+                "SELECT max_altitude, altitude_json FROM workouts
+                 WHERE id='legacy-40195'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?)
+        })
+        .unwrap();
+        assert_eq!(legacy.0, 119.0, "legacy 行本来就是米");
+        assert!(legacy.1.contains("\"alt\":119"));
+
+        let marker: Option<String> = store::with_conn(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT value FROM settings WHERE key='altitude_unit_v'",
+                    [],
+                    |r| r.get(0),
+                )
+                .optional()?)
+        })
+        .unwrap();
+        assert_eq!(marker.as_deref(), Some("14"));
+
+        // 同一份旧快照（仍是分米、仍无标记）再导入一次：快照行重新按分米
+        // 换算，结果不变；本机独有的已修正行不能被牵连。
+        import_account_data(payload).unwrap();
+        let again: f64 = store::with_conn(|conn| {
+            Ok(conn.query_row(
+                "SELECT max_altitude FROM workouts WHERE id='watch-29-1794711956'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+        assert_eq!(again, 161.0, "重复导入同一份旧快照不能二次除 10");
+        let local_again: f64 = store::with_conn(|conn| {
+            Ok(conn.query_row(
+                "SELECT max_altitude FROM workouts WHERE id='watch-99-1800000000'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+        assert_eq!(local_again, 161.0, "本机独有行不能被云端快照的换算牵连");
+
+        let _ = std::fs::remove_file(&source);
+        let _ = std::fs::remove_file(&target);
+    }
+
+    /// 模拟 v13 客户端上传的快照：settings 里没有 altitude_unit_v。
+    fn strip_altitude_marker(payload: String) -> String {
+        let mut value: JsonValue = serde_json::from_str(&payload).unwrap();
+        if let Some(settings) = value
+            .get_mut("tables")
+            .and_then(|t| t.get_mut("settings"))
+            .and_then(|s| s.as_object_mut())
+        {
+            let key_index = settings
+                .get("columns")
+                .and_then(|c| c.as_array())
+                .and_then(|c| c.iter().position(|v| v.as_str() == Some("key")))
+                .unwrap();
+            if let Some(rows) = settings.get_mut("rows").and_then(|r| r.as_array_mut()) {
+                rows.retain(|row| {
+                    row.as_array()
+                        .and_then(|r| r.get(key_index))
+                        .and_then(|k| k.as_str())
+                        != Some("altitude_unit_v")
+                });
+            }
+        }
+        value.to_string()
     }
 }

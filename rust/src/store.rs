@@ -10,7 +10,7 @@ use crate::readiness;
 
 static DB: OnceLock<Mutex<Option<Connection>>> = OnceLock::new();
 
-pub const DB_VERSION: i64 = 12;
+pub const DB_VERSION: i64 = 15;
 
 fn cell() -> &'static Mutex<Option<Connection>> {
     DB.get_or_init(|| Mutex::new(None))
@@ -282,7 +282,8 @@ CREATE TABLE IF NOT EXISTS profile(
   height_cm REAL NOT NULL DEFAULT 170,
   weight_kg REAL NOT NULL DEFAULT 65,
   birth_date TEXT NOT NULL DEFAULT '1990-01-01',
-  email TEXT NOT NULL DEFAULT ''
+  email TEXT NOT NULL DEFAULT '',
+  avatar TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS settings(
@@ -513,6 +514,7 @@ CREATE TABLE IF NOT EXISTS sync_changelog(
 "#,
     )?;
     for (table, column, decl) in [
+        ("profile", "avatar", "TEXT NOT NULL DEFAULT ''"),
         ("daily_metrics", "body_temp_c", "REAL"),
         ("daily_metrics", "respiration", "REAL"),
         ("weight_records", "height_cm", "REAL"),
@@ -689,6 +691,21 @@ CREATE TABLE IF NOT EXISTS sync_changelog(
         // v12 把锚点纳入变更比较后重跑一次，把已存在的会话补齐。
         crate::watch::rebuild_sleep_sessions(conn)?;
     }
+    if previous_version < 15 {
+        // 手表汇总包和逐点采样里的海拔/爬升是分米（0x0b/0x1c/0x1d/50004286
+        // 都是 ×10），旧版当米直接落库，爬山 141 m 会显示成 1369 m。
+        // 只修 watch-* 行：legacy-* / legacy-server-* 本来就是米。
+        //
+        // v13→v14 的旧库按分米处理；v14→v15 只做核对（6016 那版没有基准
+        // 判断，可能把已经是米的行又除了一次，需要按 GPS 轨迹拉回来）。
+        // 全新库没有历史数据要传，不必写变更日志。
+        let mode = if previous_version < 14 {
+            AltitudeMode::FromDecimetres
+        } else {
+            AltitudeMode::Verify
+        };
+        normalize_watch_altitude_units(conn, previous_version > 0, mode)?;
+    }
     backfill_sleep_stage_minutes(conn)?;
     // 旧版 maxMET 是 1e5 定点（899398 = 8.99）。早期导入把原值直接落库，
     // 这里做一次幂等归一化，避免运动详情继续显示 899398。
@@ -700,6 +717,253 @@ CREATE TABLE IF NOT EXISTS sync_changelog(
     crate::cloud::install_sync_triggers(conn)?;
     conn.pragma_update(None, "user_version", DB_VERSION)?;
     Ok(())
+}
+
+/// 落库数据的海拔单位版本。写进 settings 是为了随快照同步：旧手机传到云端的
+/// 还是分米，新手机拉回来时靠这个标记判断要不要再换算一次。
+const ALTITUDE_UNIT_KEY: &str = "altitude_unit_v";
+const ALTITUDE_UNIT_VERSION: &str = "14";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AltitudeMode {
+    /// v13 及更早：手表数据确定是分米，没有基准可比时也按分米换算。
+    FromDecimetres,
+    /// v14：只按 GPS 轨迹基准纠正明显偏大/偏小的行，拿不准就不动。
+    Verify,
+}
+
+/// 手表汇总包（0x0b 爬升 / 0x1c 最高 / 0x1d 最低）和逐点采样（50004286）
+/// 的海拔都是分米：Linkage.java 里 GT5 实测 50004286=1057，真实约 108 m。
+/// v13 及更早的代码当米直接落库，爬山 141 m 会显示成 1369 m。
+/// 只修 watch-* 行 —— legacy-* / legacy-server-* 的数据本来就是米。
+fn normalize_watch_altitude_units(
+    conn: &Connection,
+    record_changelog: bool,
+    mode: AltitudeMode,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    normalize_altitude_rows(&tx, record_changelog, mode)?;
+    mark_altitude_units(&tx, record_changelog)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// 只换算 watch-* 行的海拔字段。调用方负责事务；可重复调用（只在值仍是
+/// 分米时才有意义，见 [crate::cloud::import_account_data] 的单位判断）。
+pub(crate) fn normalize_altitude_rows(
+    conn: &Connection,
+    record_changelog: bool,
+    mode: AltitudeMode,
+) -> Result<()> {
+    let mut rows = Vec::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT id, altitude_json, detail_json, elevation_gain, elevation_loss,
+                    max_altitude, min_altitude, track_json
+             FROM workouts WHERE id LIKE 'watch-%'",
+        )?;
+        let mapped = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<f64>>(3)?,
+                r.get::<_, Option<f64>>(4)?,
+                r.get::<_, Option<f64>>(5)?,
+                r.get::<_, Option<f64>>(6)?,
+                r.get::<_, Option<String>>(7)?,
+            ))
+        })?;
+        for row in mapped {
+            rows.push(row?);
+        }
+    }
+    if rows.is_empty() {
+        return Ok(());
+    }
+    for (id, altitude_json, detail_json, gain, loss, max_alt, min_alt, track_json) in rows {
+        // 已经是米的行走过这里（例如 6015 先从已修正的云端拉过数据，本地库
+        // 仍是 v13，升级时又会进一次迁移）。拿 GPS 轨迹里的米值做基准，
+        // 比值接近 1 就跳过，否则再除一次 10 会把 161 m 变成 16 m。
+        let factor = match altitude_scale_factor(
+            track_json.as_deref(),
+            altitude_json.as_deref(),
+            max_alt,
+        ) {
+            AltitudeScale::Factor(factor) => factor,
+            AltitudeScale::AlreadyMetres => continue,
+            AltitudeScale::Unknown if mode == AltitudeMode::FromDecimetres => 0.1,
+            AltitudeScale::Unknown => continue,
+        };
+        let fixed_altitude = altitude_json
+            .as_deref()
+            .and_then(|raw| scale_altitude_json_by(raw, "alt", factor));
+        let fixed_detail = detail_json
+            .as_deref()
+            .and_then(|raw| scale_altitude_json_by(raw, "altitude", factor));
+        let changed = fixed_altitude.is_some()
+            || fixed_detail.is_some()
+            || gain.is_some()
+            || loss.is_some()
+            || max_alt.is_some()
+            || min_alt.is_some();
+        if !changed {
+            continue;
+        }
+        let scaled = |v: Option<f64>| v.map(|n| (n * factor).round());
+        conn.execute(
+            "UPDATE workouts
+             SET altitude_json = ?2, detail_json = ?3, elevation_gain = ?4,
+                 elevation_loss = ?5, max_altitude = ?6, min_altitude = ?7
+             WHERE id = ?1",
+            params![
+                id,
+                fixed_altitude.or(altitude_json),
+                fixed_detail.or(detail_json),
+                scaled(gain),
+                scaled(loss),
+                scaled(max_alt),
+                scaled(min_alt),
+            ],
+        )?;
+        // 迁移发生在触发器安装之前，不会自动进变更日志；这里补一条，
+        // 否则下一次同步只传本地新增，云端会一直留着放大 10 倍的旧值。
+        if record_changelog {
+            conn.execute(
+                "INSERT INTO sync_changelog(table_name, pk, deleted)
+                 VALUES('workouts', json_array(?1), 0)",
+                params![id],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+enum AltitudeScale {
+    /// 数据是分米，乘 0.1；被多除过一次，乘 10。
+    Factor(f64),
+    /// 比值接近 1，已经是米。
+    AlreadyMetres,
+    /// 没有可靠基准，按调用方的模式决定。
+    Unknown,
+}
+
+/// 用 GPS 轨迹（`track_json[].alt`，单位一直是米）判断同一行的海拔采样该乘
+/// 还是该除 10。
+fn altitude_scale_factor(
+    track_json: Option<&str>,
+    altitude_json: Option<&str>,
+    max_alt: Option<f64>,
+) -> AltitudeScale {
+    let track = altitude_values(track_json, "alt");
+    if track.len() < 3 {
+        return AltitudeScale::Unknown;
+    }
+    let sample = altitude_values(altitude_json, "alt");
+    let (reference, candidate) = if sample.len() >= 3 {
+        (median_value(&track), median_value(&sample))
+    } else if let Some(max) = max_alt.filter(|value| *value > 0.0) {
+        let peak = track.iter().copied().fold(f64::MIN, f64::max);
+        if peak <= 0.0 {
+            return AltitudeScale::Unknown;
+        }
+        (peak, max)
+    } else {
+        return AltitudeScale::Unknown;
+    };
+    if reference.abs() < 1.0 {
+        return AltitudeScale::Unknown;
+    }
+    let ratio = candidate / reference;
+    // 8.5..=11.5 是分米；0.085..=0.115 是 6016 那版多除了一次。
+    if (8.5..=11.5).contains(&ratio) {
+        AltitudeScale::Factor(0.1)
+    } else if (0.085..=0.115).contains(&ratio) {
+        AltitudeScale::Factor(10.0)
+    } else {
+        AltitudeScale::AlreadyMetres
+    }
+}
+
+fn altitude_values(raw: Option<&str>, key: &str) -> Vec<f64> {
+    let Some(value) = raw.and_then(|text| serde_json::from_str::<Value>(text).ok()) else {
+        return Vec::new();
+    };
+    let points = match &value {
+        Value::Array(items) => items,
+        Value::Object(map) => match map.get("trkpt") {
+            Some(Value::Array(items)) => items,
+            _ => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    points
+        .iter()
+        .filter_map(|point| point.get(key).and_then(Value::as_f64))
+        .filter(|value| *value > -100.0)
+        .collect()
+}
+
+fn median_value(values: &[f64]) -> f64 {
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let middle = sorted.len() / 2;
+    if sorted.len() % 2 == 0 {
+        (sorted[middle - 1] + sorted[middle]) / 2.0
+    } else {
+        sorted[middle]
+    }
+}
+
+/// 记录本机海拔已按米落库。这个标记随 settings 一起同步，其他设备据此
+/// 判断拉回来的快照还需不需要再除 10。
+pub(crate) fn mark_altitude_units(conn: &Connection, record_changelog: bool) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings(key, value) VALUES(?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![ALTITUDE_UNIT_KEY, ALTITUDE_UNIT_VERSION],
+    )?;
+    // 迁移发生在触发器安装之前，手动补一条变更，让标记能走增量同步。
+    if record_changelog {
+        conn.execute(
+            "INSERT INTO sync_changelog(table_name, pk, deleted)
+             VALUES('settings', json_array(?1), 0)",
+            params![ALTITUDE_UNIT_KEY],
+        )?;
+    }
+    Ok(())
+}
+
+pub(crate) fn altitude_unit_version() -> &'static str {
+    ALTITUDE_UNIT_VERSION
+}
+
+/// 把数组里每一项的 `key` 数值除以 10（分米 → 米）。`detail_json` 里只有
+/// `trkpt[].altitude` 是分米，其他字段原样保留。
+pub(crate) fn scale_altitude_json(raw: &str, key: &str) -> Option<String> {
+    scale_altitude_json_by(raw, key, 0.1)
+}
+
+/// 按给定比例缩放数组里每一项的 `key` 数值。`factor` 为 0.1 是分米 → 米，
+/// 10.0 用来拉回被多除一次的历史数据。
+pub(crate) fn scale_altitude_json_by(raw: &str, key: &str, factor: f64) -> Option<String> {
+    let mut value: Value = serde_json::from_str(raw).ok()?;
+    let points = match value.as_object_mut() {
+        Some(map) => map.get_mut("trkpt")?.as_array_mut()?,
+        None => value.as_array_mut()?,
+    };
+    let mut changed = false;
+    for point in points.iter_mut() {
+        let Some(field) = point.get_mut(key) else {
+            continue;
+        };
+        let Some(number) = field.as_f64() else {
+            continue;
+        };
+        *field = json!((number * factor).round());
+        changed = true;
+    }
+    changed.then(|| value.to_string())
 }
 
 /// 早期导入只写了总睡眠时长，深睡/REM 是 0；实时重建拿到分期后，
@@ -2442,7 +2706,7 @@ pub fn get_profile() -> Result<Profile> {
     with_conn(|conn| {
         let profile = conn
             .query_row(
-                "SELECT nickname, gender, height_cm, weight_kg, birth_date, email FROM profile WHERE id = 1",
+                "SELECT nickname, gender, height_cm, weight_kg, birth_date, email, avatar FROM profile WHERE id = 1",
                 [],
                 |r| {
                     Ok(Profile {
@@ -2452,6 +2716,7 @@ pub fn get_profile() -> Result<Profile> {
                         weight_kg: r.get(3)?,
                         birth_date: r.get(4)?,
                         email: r.get(5)?,
+                        avatar: r.get(6)?,
                     })
                 },
             )
@@ -2463,6 +2728,7 @@ pub fn get_profile() -> Result<Profile> {
             weight_kg: 65.0,
             birth_date: "1990-01-01".into(),
             email: String::new(),
+            avatar: String::new(),
         }))
     })
 }
@@ -2470,18 +2736,19 @@ pub fn get_profile() -> Result<Profile> {
 pub fn save_profile(profile: Profile) -> Result<()> {
     with_conn(|conn| {
         conn.execute(
-            "INSERT INTO profile(id, nickname, gender, height_cm, weight_kg, birth_date, email)
-             VALUES(1, ?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO profile(id, nickname, gender, height_cm, weight_kg, birth_date, email, avatar)
+             VALUES(1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(id) DO UPDATE SET nickname=excluded.nickname, gender=excluded.gender,
                height_cm=excluded.height_cm, weight_kg=excluded.weight_kg,
-               birth_date=excluded.birth_date, email=excluded.email",
+               birth_date=excluded.birth_date, email=excluded.email, avatar=excluded.avatar",
             params![
                 profile.nickname,
                 profile.gender,
                 profile.height_cm,
                 profile.weight_kg,
                 profile.birth_date,
-                profile.email
+                profile.email,
+                profile.avatar
             ],
         )?;
         Ok(())
@@ -6040,6 +6307,226 @@ mod tests {
         let other = workout_add("力量训练", 1_700_000_300_000, 600, 0.0, 80, 120, 150, "").unwrap();
         assert!(get_workout(&other).unwrap().is_some());
 
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn v14_migration_converts_watch_altitude_from_decimetres() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path = std::env::temp_dir().join(format!(
+            "vitaloop-test-v14-altitude-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let conn = Connection::open(&path).unwrap();
+        init_schema(&conn).unwrap();
+        let altitude = json!([
+            {"t": 1_000, "alt": 270},
+            {"t": 2_000, "alt": 1607}
+        ])
+        .to_string();
+        let detail = json!({
+            "trkpt": [
+                {"altitude": 326.0, "heart_rate": 88.0},
+                {"altitude": 1367.0, "heart_rate": 90.0}
+            ],
+            "summary": {"total_climb_m": 2006.0}
+        })
+        .to_string();
+        conn.execute(
+            "INSERT INTO workouts(
+                id, source, sport, start_ms, end_ms, altitude_json, detail_json,
+                elevation_gain, elevation_loss, max_altitude, min_altitude)
+             VALUES('watch-29-1794711956', 'watch', 'hiking', 1, 2, ?1, ?2,
+                    2006, 1912, 1607, 270)",
+            params![altitude, detail],
+        )
+        .unwrap();
+        // 旧版导入的行本来就是米，迁移必须一字不改。
+        conn.execute(
+            "INSERT INTO workouts(
+                id, source, sport, start_ms, end_ms, altitude_json,
+                elevation_gain, elevation_loss, max_altitude, min_altitude)
+             VALUES('legacy-40195', 'watch', 'hiking', 900000, 900001,
+                    '[{\"t\":1000,\"alt\":6},{\"t\":2000,\"alt\":119}]',
+                    450, 400, 119, 6)",
+            [],
+        )
+        .unwrap();
+
+        conn.pragma_update(None, "user_version", 13).unwrap();
+        init_schema(&conn).unwrap();
+
+        let (gain, loss, max_alt, min_alt, alt_json, detail_json): (
+            f64,
+            f64,
+            f64,
+            f64,
+            String,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT elevation_gain, elevation_loss, max_altitude, min_altitude,
+                        altitude_json, detail_json
+                 FROM workouts WHERE id = 'watch-29-1794711956'",
+                [],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!((gain, loss, max_alt, min_alt), (201.0, 191.0, 161.0, 27.0));
+        let points: Vec<Value> = serde_json::from_str(&alt_json).unwrap();
+        assert_eq!(points[0]["alt"].as_f64(), Some(27.0));
+        assert_eq!(points[1]["alt"].as_f64(), Some(161.0));
+        let detail: Value = serde_json::from_str(&detail_json).unwrap();
+        assert_eq!(detail["trkpt"][0]["altitude"].as_f64(), Some(33.0));
+        assert_eq!(detail["trkpt"][1]["altitude"].as_f64(), Some(137.0));
+        assert_eq!(detail["trkpt"][1]["heart_rate"].as_f64(), Some(90.0));
+        assert_eq!(detail["summary"]["total_climb_m"].as_f64(), Some(2006.0));
+
+        let legacy: (f64, f64, f64, f64, String) = conn
+            .query_row(
+                "SELECT elevation_gain, elevation_loss, max_altitude, min_altitude,
+                        altitude_json
+                 FROM workouts WHERE id = 'legacy-40195'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .unwrap();
+        assert_eq!(legacy.0, 450.0);
+        assert_eq!(legacy.1, 400.0);
+        assert_eq!(legacy.2, 119.0);
+        assert_eq!(legacy.3, 6.0);
+        assert!(legacy.4.contains("\"alt\":6"));
+
+        // 重复打开（已经是 v14）不能再除一次。
+        init_schema(&conn).unwrap();
+        let again: f64 = conn
+            .query_row(
+                "SELECT max_altitude FROM workouts WHERE id = 'watch-29-1794711956'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(again, 161.0);
+
+        drop(conn);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn v14_migration_skips_rows_already_in_metres() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path =
+            std::env::temp_dir().join(format!("vitaloop-test-altm-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let conn = Connection::open(&path).unwrap();
+        init_schema(&conn).unwrap();
+        // 6015 从已修正的云端拉下来的行：库里仍是米，但 user_version 被
+        // 重置成 13（例如降级重装）后会再次触发迁移。
+        let track = json!([
+            {"t": 1_000, "alt": 31},
+            {"t": 2_000, "alt": 120},
+            {"t": 3_000, "alt": 161}
+        ])
+        .to_string();
+        let altitude = json!([
+            {"alt": 27},
+            {"alt": 120},
+            {"alt": 161}
+        ])
+        .to_string();
+        conn.execute(
+            "INSERT INTO workouts(
+                id, source, sport, start_ms, end_ms, track_json, altitude_json,
+                elevation_gain, elevation_loss, max_altitude, min_altitude)
+             VALUES('watch-30-1794711956', 'watch', 'hiking', 1, 2, ?1, ?2,
+                    201, 191, 161, 27)",
+            params![track, altitude],
+        )
+        .unwrap();
+
+        conn.pragma_update(None, "user_version", 13).unwrap();
+        init_schema(&conn).unwrap();
+
+        let (gain, max_alt, min_alt, alt_json): (f64, f64, f64, String) = conn
+            .query_row(
+                "SELECT elevation_gain, max_altitude, min_altitude, altitude_json
+                 FROM workouts WHERE id = 'watch-30-1794711956'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!((gain, max_alt, min_alt), (201.0, 161.0, 27.0));
+        let points: Vec<Value> = serde_json::from_str(&alt_json).unwrap();
+        assert_eq!(points[2]["alt"].as_f64(), Some(161.0));
+
+        drop(conn);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn v15_migration_restores_rows_divided_twice() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path =
+            std::env::temp_dir().join(format!("vitaloop-test-alt10-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let conn = Connection::open(&path).unwrap();
+        init_schema(&conn).unwrap();
+        // 6016 那版把已按米落库的行又除了一次 10：161 m 变成 16 m。
+        // GPS 轨迹仍是米，v15 应该把它乘回去，而不是再除。
+        let track = json!([
+            {"t": 1_000, "alt": 31},
+            {"t": 2_000, "alt": 120},
+            {"t": 3_000, "alt": 161}
+        ])
+        .to_string();
+        let altitude = json!([{"alt": 3}, {"alt": 12}, {"alt": 16}]).to_string();
+        conn.execute(
+            "INSERT INTO workouts(
+                id, source, sport, start_ms, end_ms, track_json, altitude_json,
+                elevation_gain, elevation_loss, max_altitude, min_altitude)
+             VALUES('watch-31-1794711956', 'watch', 'hiking', 1, 2, ?1, ?2,
+                    20, 19, 16, 3)",
+            params![track, altitude],
+        )
+        .unwrap();
+
+        conn.pragma_update(None, "user_version", 14).unwrap();
+        init_schema(&conn).unwrap();
+
+        let (gain, max_alt, min_alt, alt_json): (f64, f64, f64, String) = conn
+            .query_row(
+                "SELECT elevation_gain, max_altitude, min_altitude, altitude_json
+                 FROM workouts WHERE id = 'watch-31-1794711956'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!((gain, max_alt, min_alt), (200.0, 160.0, 30.0));
+        let points: Vec<Value> = serde_json::from_str(&alt_json).unwrap();
+        assert_eq!(points[2]["alt"].as_f64(), Some(160.0));
+
+        // 再打开一次（已是 v15）不能来回抖动。
+        init_schema(&conn).unwrap();
+        let again: f64 = conn
+            .query_row(
+                "SELECT max_altitude FROM workouts WHERE id = 'watch-31-1794711956'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(again, 160.0);
+
+        drop(conn);
         let _ = std::fs::remove_file(&path);
     }
 }

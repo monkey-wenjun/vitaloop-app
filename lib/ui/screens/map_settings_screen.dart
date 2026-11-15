@@ -50,6 +50,10 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
 
   Future<void> _downloadCity() async {
     if (_downloading) return;
+    if (settings.provider == MapBaseProvider.opentopo) {
+      _toast('等高线底图只做浏览缓存：OpenTopoMap 条款不允许批量预下载');
+      return;
+    }
     final fix = await GpsBridge.instance.lastKnown();
     if (!mounted) return;
     if (fix == null) {
@@ -181,6 +185,8 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
                               ? '${(state.progress * 100).round()}% · ${settings.provider.label}'
                               : switch (settings.provider) {
                                   MapBaseProvider.amap => '缓存当前城市高德瓦片，离线也能看到街道',
+                                  MapBaseProvider.opentopo =>
+                                    '等高线地形按浏览缓存；OpenTopoMap 条款不允许批量预下载',
                                   MapBaseProvider.pmtiles =>
                                     'PMTiles 底图按离线区域缓存当前城市',
                                   _ => '当前底图使用 OpenStreetMap 数据',
@@ -204,6 +210,8 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
     final selected = settings.provider == provider;
     final description = switch (provider) {
       MapBaseProvider.amap => '高德 GCJ-02 栅格底图，支持当前城市离线缓存。',
+      MapBaseProvider.opentopo =>
+        '等高线 + 山体阴影（OpenTopoMap）。徒步、越野看山脊和坡度用它，坐标是 WGS-84。',
       MapBaseProvider.pmtiles => '默认。自托管矢量地图，支持城市离线区域缓存。',
       MapBaseProvider.tencent => '需要配置腾讯地图官方 SDK Key；当前显示轨迹叠加。',
       MapBaseProvider.baidu => '需要配置百度地图官方 SDK Key；BD-09 坐标单独适配。',
@@ -223,9 +231,11 @@ class _MapSettingsScreenState extends State<MapSettingsScreen> {
                 borderRadius: BorderRadius.circular(13),
               ),
               child: Icon(
-                provider == MapBaseProvider.pmtiles
-                    ? Icons.public_rounded
-                    : Icons.map_rounded,
+                switch (provider) {
+                  MapBaseProvider.pmtiles => Icons.public_rounded,
+                  MapBaseProvider.opentopo => Icons.terrain_rounded,
+                  _ => Icons.map_rounded,
+                },
                 color: selected ? v.blueInk : v.greyInk,
               ),
             ),

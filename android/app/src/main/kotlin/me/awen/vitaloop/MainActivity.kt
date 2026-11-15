@@ -212,6 +212,16 @@ class MainActivity : FlutterActivity() {
                         downloadAndInstall(url, result)
                     }
                 }
+                "open_url" -> {
+                    val url = call.argument<String>("url") ?: ""
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.e("VitaloopUpdate", "open url failed", e)
+                        result.success(false)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -264,6 +274,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "disconnect" -> {
                     manager.disconnect()
+                    result.success(null)
+                }
+                "reauthenticate" -> {
+                    manager.forceReauthentication()
                     result.success(null)
                 }
                 "state" -> result.success(manager.state)

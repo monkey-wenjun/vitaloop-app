@@ -472,6 +472,7 @@ pub fn import(db_path: &str, config_json: &str) -> Result<LegacyImportReport> {
                 .unwrap_or(65.0),
             birth_date: str_of(profile, "birth_date"),
             email: String::new(),
+            avatar: String::new(),
         };
         if !p.nickname.is_empty() || p.height_cm > 0.0 {
             store::save_profile(p)?;

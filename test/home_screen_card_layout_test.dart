@@ -269,5 +269,6 @@ AppState _demoState({AppState? state, int exerciseMinutes = 0}) {
       weightKg: 69.4,
       birthDate: '1995-01-01',
       email: '',
+      avatar: '',
     );
 }

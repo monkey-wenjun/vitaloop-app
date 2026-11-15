@@ -47,6 +47,38 @@ Set<(int, int, int)> _tiles(WidgetTester tester) => {
         ),
 };
 
+/// 路径式瓦片 URL（OpenTopoMap：`/z/x/y.png`）解析成 (x, y, z)。
+Set<(int, int, int)> _pathTiles(WidgetTester tester) => {
+  for (final image in tester.widgetList<Image>(find.byType(Image)))
+    if (image.image case final AmapTileImageProvider provider)
+      if (Uri.tryParse(provider.url) case final uri?)
+        if (uri.pathSegments.length >= 3)
+          (
+            int.tryParse(uri.pathSegments[uri.pathSegments.length - 2]) ?? -1,
+            int.tryParse(
+                  uri.pathSegments.last.replaceFirst(RegExp(r'\.\w+$'), ''),
+                ) ??
+                -1,
+            int.tryParse(uri.pathSegments[uri.pathSegments.length - 3]) ?? -1,
+          ),
+};
+
+Set<String> _tileHosts(WidgetTester tester) => {
+  for (final image in tester.widgetList<Image>(find.byType(Image)))
+    if (image.image case final AmapTileImageProvider provider)
+      Uri.tryParse(provider.url)?.host ?? '',
+};
+
+(int, int) _wgs84Tile(double lat, double lon, int z) {
+  final count = 1 << z;
+  final x = (((lon + 180) / 360) * count).floor();
+  final sinLat = math.sin(lat * math.pi / 180);
+  final y =
+      ((0.5 - math.log((1 + sinLat) / (1 - sinLat)) / (4 * math.pi)) * count)
+          .floor();
+  return (x, y);
+}
+
 void main() {
   setUp(() {
     MapDisplaySettings.instance.provider = MapBaseProvider.amap;
@@ -223,6 +255,88 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(_tileImages(tester), 0);
+  });
+
+  group('等高线地形底图', () {
+    testWidgets('瓦片走 OpenTopoMap，且不做 GCJ-02 偏移', (tester) async {
+      MapDisplaySettings.instance.provider = MapBaseProvider.opentopo;
+      // 杭州西湖，WGS-84。高德会把它偏到东北约 400m；等高线必须原样落位。
+      const lat = 30.2500;
+      const lon = 120.1400;
+      await tester.pumpWidget(
+        _host(
+          const AmapRouteMap(
+            points: [Offset(lat, lon), Offset(lat + 0.002, lon + 0.002)],
+            wgs84: true,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        _tileHosts(tester).every(
+          (host) => host.endsWith('.tile.opentopomap.org'),
+        ),
+        isTrue,
+      );
+      final zoom = _pathTiles(tester).map((t) => t.$3).reduce(math.max);
+      final (expectX, expectY) = _wgs84Tile(lat + 0.001, lon + 0.001, zoom);
+      final tiles = _pathTiles(tester);
+      expect(tiles.any((t) => (t.$1 - expectX).abs() <= 1), isTrue);
+      expect(tiles.any((t) => (t.$2 - expectY).abs() <= 1), isTrue);
+      expect(_tileImages(tester), lessThanOrEqualTo(81));
+    });
+
+    testWidgets('深色主题只压暗、不反相，等高线仍可读', (tester) async {
+      MapDisplaySettings.instance.provider = MapBaseProvider.opentopo;
+      await tester.pumpWidget(
+        _darkHost(
+          const AmapRouteMap(
+            points: [Offset(30.25, 120.14), Offset(30.252, 120.142)],
+            wgs84: true,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      final filtered = tester.widgetList<ColorFiltered>(
+        find.byType(ColorFiltered),
+      );
+      expect(filtered, hasLength(1));
+      expect(_tileImages(tester), greaterThan(0));
+    });
+
+    testWidgets('切到等高线后重新拟合，不沿用高德的偏移机位', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const AmapRouteMap(
+            points: [Offset(30.25, 120.14), Offset(30.252, 120.142)],
+            wgs84: true,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        _tileHosts(tester).every((h) => h.endsWith('.is.autonavi.com')),
+        isTrue,
+      );
+
+      await MapDisplaySettings.instance.setProvider(MapBaseProvider.opentopo);
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        _tileHosts(tester).every(
+          (host) => host.endsWith('.tile.opentopomap.org'),
+        ),
+        isTrue,
+      );
+      expect(_tileImages(tester), greaterThan(0));
+    });
   });
 
   testWidgets('实时跟随时车头朝上，轨迹增长后相机不缩小也不来回抖', (tester) async {
