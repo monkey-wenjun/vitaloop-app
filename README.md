@@ -12,6 +12,8 @@ sync, workout analysis, and optional self-hosted services.
 > passwords, or signing keys; the About screen only lists the author's name,
 > email, and blog address.
 
+Website (English / 简体中文): <https://vitaloop.awen.me/>
+
 ## Screenshots
 
 Captured from the Android development build with illustrative device data. The
