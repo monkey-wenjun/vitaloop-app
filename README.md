@@ -8,7 +8,9 @@ sync, workout analysis, and optional self-hosted services.
 
 > **Status: v0.1 preview.** Local tracking, Huawei watch sync, workout analysis,
 > data migration, and export are usable without an account. The public build
-> contains no default cloud, ephemeris, or private infrastructure endpoint.
+> ships with no default cloud or ephemeris endpoint and contains no API keys,
+> passwords, or signing keys; the About screen only lists the author's name,
+> email, and blog address.
 
 ## Screenshots
 
@@ -64,7 +66,7 @@ Captured from the Android development build with illustrative device data.
 ## Privacy model
 
 The public source and build do **not** contain a default cloud server, ephemeris
-server, private domain, API key, or signing key.
+server, API key, or signing key.
 
 - Local-only operation requires no account.
 - Cloud synchronization is disabled until the user enters a server address and
