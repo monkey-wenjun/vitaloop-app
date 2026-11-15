@@ -14,19 +14,21 @@ sync, workout analysis, and optional self-hosted services.
 
 ## Screenshots
 
-Captured from the Android development build with illustrative device data.
+Captured from the Android development build with illustrative device data. The
+English UI screenshots are below; the Chinese ones are in
+[README.zh-CN.md](README.zh-CN.md).
 
 **Light theme**
 
 | Fitness dashboard | Sleep detail | Workout | Statistics |
 |:---:|:---:|:---:|:---:|
-| <img src="docs/screenshots/home-light.png" alt="Vitaloop fitness dashboard in the light theme" width="190"> | <img src="docs/screenshots/sleep-light.png" alt="Vitaloop sleep detail in the light theme" width="190"> | <img src="docs/screenshots/sport-light.png" alt="Vitaloop workout home in the light theme" width="190"> | <img src="docs/screenshots/statistics-light.png" alt="Vitaloop workout statistics in the light theme" width="190"> |
+| <img src="docs/screenshots/home-light-en.png" alt="Vitaloop fitness dashboard in the light theme" width="190"> | <img src="docs/screenshots/sleep-light-en.png" alt="Vitaloop sleep detail in the light theme" width="190"> | <img src="docs/screenshots/sport-light-en.png" alt="Vitaloop workout home in the light theme" width="190"> | <img src="docs/screenshots/statistics-light-en.png" alt="Vitaloop workout statistics in the light theme" width="190"> |
 
 **Dark theme**
 
 | Fitness dashboard | Sleep detail | Workout | Statistics |
 |:---:|:---:|:---:|:---:|
-| <img src="docs/screenshots/home-dark.png" alt="Vitaloop fitness dashboard in the dark theme" width="190"> | <img src="docs/screenshots/sleep-dark.png" alt="Vitaloop sleep detail in the dark theme" width="190"> | <img src="docs/screenshots/sport-dark.png" alt="Vitaloop workout home in the dark theme" width="190"> | <img src="docs/screenshots/statistics-dark.png" alt="Vitaloop workout statistics in the dark theme" width="190"> |
+| <img src="docs/screenshots/home-dark-en.png" alt="Vitaloop fitness dashboard in the dark theme" width="190"> | <img src="docs/screenshots/sleep-dark-en.png" alt="Vitaloop sleep detail in the dark theme" width="190"> | <img src="docs/screenshots/sport-dark-en.png" alt="Vitaloop workout home in the dark theme" width="190"> | <img src="docs/screenshots/statistics-dark-en.png" alt="Vitaloop workout statistics in the dark theme" width="190"> |
 
 ## Features
 
