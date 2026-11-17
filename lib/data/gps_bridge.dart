@@ -89,6 +89,9 @@ class GpsBridge {
       final last = current.last;
       final meters = _haversine(last.lat, last.lon, fix.lat, fix.lon);
       final dt = (fix.ts - last.ts) / 1000.0;
+      final isStationary = fix.speed >= 0 && fix.speed < 0.5;
+      final isWithinAccuracy = meters <= fix.accuracy * 2;
+      if (isStationary && isWithinAccuracy) return;
       speedMps.value = fix.speed > 0.2
           ? fix.speed
           : (dt > 0 ? meters / dt : 0).clamp(0.0, 15.0).toDouble();

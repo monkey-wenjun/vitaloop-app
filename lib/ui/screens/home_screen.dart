@@ -862,9 +862,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SizedBox(width: width, child: child),
           ),
           childWhenDragging: Opacity(opacity: 0.3, child: target),
-          // 编辑态点卡片不该再跳详情；拦住内层点击，但长按拖动仍由外层
-          // LongPressDraggable 接收。
-          child: AbsorbPointer(absorbing: _editing, child: target),
+          child: target,
         ),
       ),
     );

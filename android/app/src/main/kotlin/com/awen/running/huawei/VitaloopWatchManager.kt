@@ -24,10 +24,12 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.CalendarContract
+import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.OpenableColumns
 import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
+import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.google.gson.Gson
@@ -4149,9 +4151,43 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
 
     // ==================== 来电转发与手表通话控制 ====================
 
-    private var phoneStateListener: PhoneStateListener? = null
+    private var phoneStateListener: Any? = null
     private var callListenerRegistered = false
     private var callRinging = false
+    private fun phoneNumberProvider(): String? = try {
+        val manager = appContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        when (manager?.callState) {
+            TelephonyManager.CALL_STATE_RINGING -> latestIncomingNumber()
+            else -> null
+        }
+    } catch (_: SecurityException) {
+        null
+    }
+
+    private fun latestIncomingNumber(): String? {
+        if (appContext.checkSelfPermission(Manifest.permission.READ_CALL_LOG) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return null
+        }
+        val uri = CallLog.Calls.CONTENT_URI.buildUpon()
+            .appendQueryParameter(CallLog.Calls.LIMIT_PARAM_KEY, "1")
+            .build()
+        return appContext.contentResolver.query(
+            uri,
+            arrayOf(CallLog.Calls.NUMBER),
+            null,
+            null,
+            "${CallLog.Calls.DATE} DESC",
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(CallLog.Calls.NUMBER)
+                if (index >= 0) cursor.getString(index) else null
+            } else {
+                null
+            }
+        }
+    }
 
     /** 连接就绪后监听手机来电，并把来电推到手表。 */
     fun startCallForwarding() {
@@ -4168,26 +4204,43 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                 val telephony =
                     appContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                         ?: return@post
-                val listener = phoneStateListener ?: object : PhoneStateListener() {
-                    @Deprecated("Deprecated in Java")
-                    override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                        when (state) {
-                            TelephonyManager.CALL_STATE_RINGING -> {
-                                callRinging = true
-                                val name = phoneNumber?.let { lookupContactName(it) }
-                                pushCallNotification(name ?: phoneNumber)
-                            }
-                            TelephonyManager.CALL_STATE_IDLE -> {
-                                if (callRinging) {
-                                    callRinging = false
-                                    clearNotification()
-                                }
+                fun handleCallState(state: Int, phoneNumber: String?) {
+                    when (state) {
+                        TelephonyManager.CALL_STATE_RINGING -> {
+                            callRinging = true
+                            val name = phoneNumber?.let { lookupContactName(it) }
+                            pushCallNotification(name ?: phoneNumber)
+                        }
+                        TelephonyManager.CALL_STATE_IDLE -> {
+                            if (callRinging) {
+                                callRinging = false
+                                clearNotification()
                             }
                         }
                     }
-                }.also { phoneStateListener = it }
-                @Suppress("DEPRECATION")
-                telephony.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val listener = phoneStateListener as? TelephonyCallback ?: object :
+                        TelephonyCallback(),
+                        TelephonyCallback.CallStateListener {
+                        override fun onCallStateChanged(state: Int) {
+                            handleCallState(state, phoneNumberProvider())
+                        }
+                    }
+                    telephony.registerTelephonyCallback(appContext.mainExecutor, listener)
+                    phoneStateListener = listener
+                } else {
+                    @Suppress("DEPRECATION")
+                    val listener = phoneStateListener as? PhoneStateListener ?: object :
+                        PhoneStateListener() {
+                        override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                            handleCallState(state, phoneNumber)
+                        }
+                    }
+                    telephony.listen(listener, PhoneStateListener.LISTEN_CALL_STATE)
+                    phoneStateListener = listener
+                }
                 callListenerRegistered = true
                 addLog("来电转发已开启")
             } catch (e: Exception) {
@@ -4203,8 +4256,15 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                     appContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                 val listener = phoneStateListener
                 if (listener != null && telephony != null) {
-                    @Suppress("DEPRECATION")
-                    telephony.listen(listener, PhoneStateListener.LISTEN_NONE)
+                    if (
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        listener is TelephonyCallback
+                    ) {
+                        telephony.unregisterTelephonyCallback(listener)
+                    } else if (listener is PhoneStateListener) {
+                        @Suppress("DEPRECATION")
+                        telephony.listen(listener, PhoneStateListener.LISTEN_NONE)
+                    }
                 }
             } catch (e: Exception) {
                 FileLogger.e(TAG, "停止来电转发失败", e)
@@ -5808,6 +5868,15 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     }
 
     private fun sendMusicNowPlaying(artist: String?, title: String?, playing: Boolean) {
+        val artistKey = artist?.takeIf { it.isNotBlank() } ?: ""
+        val titleKey = title?.takeIf { it.isNotBlank() } ?: ""
+        if (
+            artistKey == (currentMusicArtist ?: "") &&
+            titleKey == (currentMusicTitle ?: "") &&
+            playing == currentMusicPlaying
+        ) {
+            return
+        }
         currentMusicArtist = artist
         currentMusicTitle = title
         currentMusicPlaying = playing
