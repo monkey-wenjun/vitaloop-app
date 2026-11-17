@@ -37,6 +37,11 @@ class VitaloopNotificationListenerService : NotificationListenerService() {
         super.onNotificationPosted(sbn)
         if (sbn.isOngoing || sbn.packageName == packageName) return
         if (sbn.packageName in BLOCKED_PACKAGES) return
+        if (sbn.notification?.category in setOf(
+                Notification.CATEGORY_PROGRESS,
+                Notification.CATEGORY_TRANSPORT,
+            )
+        ) return
         val manager = VitaloopWatchManager.shared ?: return
         val prefs = getSharedPreferences("vitaloop_watch", MODE_PRIVATE)
         if (!prefs.getBoolean("notification_forward", true)) return

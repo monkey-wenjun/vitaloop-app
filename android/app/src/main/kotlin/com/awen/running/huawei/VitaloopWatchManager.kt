@@ -15,6 +15,7 @@ import android.media.MediaMetadataRetriever
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.media.session.MediaSessionManager
+import android.media.session.MediaController
 import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
@@ -428,6 +429,8 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     @Volatile private var lastToolMessage = ""
     private var findPhoneRingtone: Ringtone? = null
     private var mediaSessionListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
+    @Volatile private var activeMediaController: MediaController? = null
+    @Volatile private var mediaControllerCallback: MediaController.Callback? = null
     private var appDeviceParams: App.AppDeviceParams? = null
     private val recentWatchfaceConfirms = ConcurrentHashMap<String, Long>()
     @Volatile private var currentMusicTitle: String? = null
@@ -5841,16 +5844,31 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             val listener = ComponentName(appContext, VitaloopNotificationListenerService::class.java)
             if (mediaSessionListener == null) {
                 val callback = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
-                    val controller = controllers?.firstOrNull() ?: return@OnActiveSessionsChangedListener
-                    val meta = controller.metadata
-                    sendMusicNowPlaying(
-                        meta?.getString(MediaMetadata.METADATA_KEY_ARTIST),
-                        meta?.getString(MediaMetadata.METADATA_KEY_TITLE),
-                        controller.playbackState?.state == PlaybackState.STATE_PLAYING,
-                    )
+                    activeMediaController?.let { current ->
+                        mediaControllerCallback?.let(current::unregisterCallback)
+                    }
+                    activeMediaController = controllers?.firstOrNull()
+                    activeMediaController?.let { controller ->
+                        controller.registerCallback(mediaControllerCallback ?: MediaController.Callback())
+                    }
+                    pushActiveMediaNowPlaying()
+                }
+                mediaControllerCallback = object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        pushActiveMediaNowPlaying()
+                    }
+
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        pushActiveMediaNowPlaying()
+                    }
                 }
                 mgr.addOnActiveSessionsChangedListener(callback, listener, Handler(Looper.getMainLooper()))
                 mediaSessionListener = callback
+                activeMediaController = mgr.getActiveSessions(listener).firstOrNull()
+                activeMediaController?.let { controller ->
+                    controller.registerCallback(mediaControllerCallback)
+                }
+                pushActiveMediaNowPlaying()
             }
         } catch (e: Exception) {
             FileLogger.e(TAG, "注册媒体会话监听失败", e)
@@ -5861,7 +5879,12 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         try {
             val mgr = appContext.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
             mediaSessionListener?.let { mgr?.removeOnActiveSessionsChangedListener(it) }
+            activeMediaController?.let { controller ->
+                mediaControllerCallback?.let(controller::unregisterCallback)
+            }
             mediaSessionListener = null
+            activeMediaController = null
+            mediaControllerCallback = null
         } catch (e: Exception) {
             FileLogger.e(TAG, "注销媒体会话监听失败", e)
         }
@@ -5905,6 +5928,16 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                 FileLogger.e(TAG, "音乐推送失败", e)
             }
         }, "VitaloopMusicPush").apply { isDaemon = true; start() }
+    }
+
+    private fun pushActiveMediaNowPlaying() {
+        val controller = activeMediaController ?: return
+        val meta = controller.metadata
+        sendMusicNowPlaying(
+            meta?.getString(MediaMetadata.METADATA_KEY_ARTIST),
+            meta?.getString(MediaMetadata.METADATA_KEY_TITLE),
+            controller.playbackState?.state == PlaybackState.STATE_PLAYING,
+        )
     }
 
     private fun queryActiveMediaAndPush() {

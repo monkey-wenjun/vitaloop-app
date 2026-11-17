@@ -940,6 +940,9 @@ class MainActivity : FlutterActivity() {
                     if (!hasPermission(android.Manifest.permission.READ_PHONE_STATE)) {
                         wanted.add(android.Manifest.permission.READ_PHONE_STATE)
                     }
+                    if (!hasPermission(android.Manifest.permission.READ_CONTACTS)) {
+wanted.add(android.Manifest.permission.READ_CONTACTS)
+                    }
                     if (android.os.Build.VERSION.SDK_INT >= 26 &&
                         !hasPermission(android.Manifest.permission.ANSWER_PHONE_CALLS)
                     ) {

@@ -206,7 +206,8 @@ class _WorkoutLiveScreenState extends State<WorkoutLiveScreen> {
   static double _pathDistanceMeters(List<Offset> points) {
     var total = 0.0;
     for (var i = 1; i < points.length; i++) {
-      total += _distanceMeters(points[i - 1], points[i]);
+      final delta = _distanceMeters(points[i - 1], points[i]);
+      if (delta > 8) total += delta;
     }
     return total;
   }
