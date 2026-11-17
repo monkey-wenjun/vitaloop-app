@@ -35,10 +35,6 @@ trap 'rm -f "$rule_file"' EXIT
   printf '%s\n' '(^|[^0-9])(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}|169\.254\.[0-9]{1,3}\.[0-9]{1,3})([^0-9]|$)'
 } > "$rule_file"
 
-if [ -n "$(printf '%s\n' "$patterns" | grep -E '^awen\\\.me$|^awen\.me$')" ]; then
-  printf '%s\n' '(^|[^.])vitaloop\.awen\.me([^a-zA-Z0-9.-]|$)' >> "$rule_file"
-fi
-
 case "$MODE" in
   --staged)
     matches=$(git grep --cached -l -I -i -E -f "$rule_file" -- . || true)
