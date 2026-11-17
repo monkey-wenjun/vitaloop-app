@@ -941,7 +941,6 @@ class AboutScreen extends StatefulWidget {
 class _AboutScreenState extends State<AboutScreen> {
   String? _shownVersion;
   bool _dialogOpen = false;
-  bool _installing = false;
 
   AppState get _state => widget.state;
 
@@ -963,6 +962,9 @@ class _AboutScreenState extends State<AboutScreen> {
   void _onStateChanged() {
     if (!mounted) return;
     setState(() {});
+    if (_state.autoUpdateEnabled && _state.availableUpdate != null) {
+      unawaited(_state.autoInstallUpdate());
+    }
     final update = _state.availableUpdate;
     if (update != null) _queueUpdateDialog(update);
   }
@@ -988,6 +990,7 @@ class _AboutScreenState extends State<AboutScreen> {
 
   void _queueUpdateDialog(AppUpdateInfo update) {
     if (!mounted || _dialogOpen) return;
+    if (_state.autoUpdateEnabled) return;
     if (_shownVersion == update.latestVersion) return;
     _shownVersion = update.latestVersion;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1045,7 +1048,7 @@ class _AboutScreenState extends State<AboutScreen> {
   }
 
   Future<void> _install(AppUpdateInfo update) async {
-    if (_installing) return;
+    if (_state.updateInstalling) return;
     if (!await AppUpdateClient.canInstall()) {
       if (!mounted) return;
       final go = await showDialog<bool>(
@@ -1070,7 +1073,7 @@ class _AboutScreenState extends State<AboutScreen> {
     }
 
     if (!mounted) return;
-    setState(() => _installing = true);
+    setState(() => _state.updateInstalling = true);
     var loadingOpen = true;
     unawaited(
       showDialog<void>(
@@ -1098,13 +1101,13 @@ class _AboutScreenState extends State<AboutScreen> {
       Navigator.of(context, rootNavigator: true).pop();
     }
     if (!mounted) return;
-    setState(() => _installing = false);
+    setState(() => _state.updateInstalling = false);
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   String _updateSubtitle() {
-    if (_installing) return '正在下载更新包…';
+    if (_state.updateInstalling) return '正在下载更新包…';
     if (_state.updateChecking) return '正在检查服务端版本…';
     final update = _state.availableUpdate;
     if (update != null) {
@@ -1120,7 +1123,7 @@ class _AboutScreenState extends State<AboutScreen> {
   @override
   Widget build(BuildContext context) {
     final v = context.v;
-    final busy = _state.updateChecking || _installing;
+    final busy = _state.updateChecking || _state.updateInstalling;
     return Scaffold(
       backgroundColor: v.bg,
       body: SafeArea(
@@ -1184,6 +1187,18 @@ class _AboutScreenState extends State<AboutScreen> {
                         : null,
                     showChevron: !busy,
                     onTap: busy ? null : () => _check(manual: true),
+                  ),
+                  VRowItem(
+                    icon: Icons.download_done_rounded,
+                    iconBackground: v.tintGreen,
+                    iconColor: v.greenInk,
+                    title: '自动更新',
+                    subtitle: _state.updateInstallMessage ?? '发现新包后自动下载并校验',
+                    trailing: Switch(
+                      value: _state.autoUpdateEnabled,
+                      activeThumbColor: v.blue,
+                      onChanged: (value) => _state.setAutoUpdate(value),
+                    ),
                   ),
                   const VRowItem(
                     icon: Icons.code_rounded,

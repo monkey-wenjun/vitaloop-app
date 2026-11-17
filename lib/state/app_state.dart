@@ -49,6 +49,9 @@ class AppState extends ChangeNotifier {
   AppUpdateInfo? availableUpdate;
   bool updateChecking = false;
   String? updateCheckError;
+  bool autoUpdateEnabled = true;
+  bool updateInstalling = false;
+  String? updateInstallMessage;
   Future<void>? _updateFuture;
 
   bool get hasDevice => devices.any((d) => d.connected);
@@ -86,6 +89,8 @@ class AppState extends ChangeNotifier {
           (accountEmail?.isNotEmpty ?? false) &&
           (_cloudToken?.isNotEmpty ?? false);
       appVersion = await AppUpdateClient.currentVersion();
+      autoUpdateEnabled =
+          await VitaloopApi.setting('app_auto_update', '1') == '1';
       final last = int.tryParse(
         await VitaloopApi.setting('cloud_last_sync_ms', ''),
       );
@@ -270,6 +275,36 @@ class AppState extends ChangeNotifier {
     return future.whenComplete(() {
       if (identical(_updateFuture, future)) _updateFuture = null;
     });
+  }
+
+  Future<void> setAutoUpdate(bool enabled) async {
+    if (autoUpdateEnabled == enabled) return;
+    autoUpdateEnabled = enabled;
+    await VitaloopApi.setSetting('app_auto_update', enabled ? '1' : '0');
+    notifyListeners();
+    if (enabled) unawaited(checkForUpdate().then((_) => autoInstallUpdate()));
+  }
+
+  Future<void> autoInstallUpdate() async {
+    final update = availableUpdate;
+    if (!autoUpdateEnabled || update == null || updateInstalling) return;
+    if (!await AppUpdateClient.canInstall()) {
+      updateInstallMessage = '自动更新需要先允许元环安装应用';
+      notifyListeners();
+      return;
+    }
+    updateInstalling = true;
+    updateInstallMessage = '正在下载更新包…';
+    notifyListeners();
+    try {
+      final result = await AppUpdateClient.downloadAndInstall(
+        update.downloadUrl,
+      );
+      updateInstallMessage = result.message;
+    } finally {
+      updateInstalling = false;
+      notifyListeners();
+    }
   }
 
   Future<void> _runUpdateCheck() async {
