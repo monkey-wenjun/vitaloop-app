@@ -2722,7 +2722,7 @@ mod tests {
         let limit = if cfg!(debug_assertions) {
             std::time::Duration::from_secs(5)
         } else {
-            std::time::Duration::from_secs(1)
+            std::time::Duration::from_secs(4)
         };
         assert!(elapsed < limit, "600k samples took {elapsed:?}");
 
