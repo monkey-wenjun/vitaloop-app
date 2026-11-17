@@ -29,5 +29,5 @@ jobs:
       - run: flutter gen-l10n
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
-      - run: cargo test --manifest-path rust/Cargo.toml
+      - run: cargo test --release --manifest-path rust/Cargo.toml
       - run: flutter build apk --debug
