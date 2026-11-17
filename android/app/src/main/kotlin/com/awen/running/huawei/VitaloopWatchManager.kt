@@ -5843,16 +5843,6 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                 ?: return
             val listener = ComponentName(appContext, VitaloopNotificationListenerService::class.java)
             if (mediaSessionListener == null) {
-                val callback = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
-                    activeMediaController?.let { current ->
-                        mediaControllerCallback?.let(current::unregisterCallback)
-                    }
-                    activeMediaController = controllers?.firstOrNull()
-                    activeMediaController?.let { controller ->
-                        controller.registerCallback(mediaControllerCallback ?: MediaController.Callback())
-                    }
-                    pushActiveMediaNowPlaying()
-                }
                 mediaControllerCallback = object : MediaController.Callback() {
                     override fun onMetadataChanged(metadata: MediaMetadata?) {
                         pushActiveMediaNowPlaying()
@@ -5862,11 +5852,25 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                         pushActiveMediaNowPlaying()
                     }
                 }
+                val callback = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+                    activeMediaController?.let { current ->
+                        mediaControllerCallback?.let(current::unregisterCallback)
+                    }
+                    activeMediaController = controllers?.firstOrNull()
+                    activeMediaController?.let { controller ->
+                        mediaControllerCallback?.let { callback ->
+                            controller.registerCallback(callback)
+                        }
+                    }
+                    pushActiveMediaNowPlaying()
+                }
                 mgr.addOnActiveSessionsChangedListener(callback, listener, Handler(Looper.getMainLooper()))
                 mediaSessionListener = callback
                 activeMediaController = mgr.getActiveSessions(listener).firstOrNull()
                 activeMediaController?.let { controller ->
-                    controller.registerCallback(mediaControllerCallback)
+                    mediaControllerCallback?.let { mediaCallback ->
+                        controller.registerCallback(mediaCallback)
+                    }
                 }
                 pushActiveMediaNowPlaying()
             }
