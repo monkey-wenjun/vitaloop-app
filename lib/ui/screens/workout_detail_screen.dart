@@ -1931,28 +1931,21 @@ class _StatCell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Tooltip(
-            message: item.help ?? '',
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.label,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: VText.label.copyWith(
-                      fontSize: 10,
-                      color: v.muted,
-                      fontWeight: FontWeight.w700,
-                    ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: VText.label.copyWith(
+                    fontSize: 10,
+                    color: v.muted,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (item.help != null) ...[
-                  const SizedBox(width: 3),
-                  Icon(Icons.info_outline_rounded, size: 12, color: v.muted),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(height: 3),
           Text.rich(
@@ -1977,12 +1970,11 @@ class _StatCell extends StatelessWidget {
 }
 
 class _StatItem {
-  const _StatItem(this.label, this.value, this.unit, {this.help});
+  const _StatItem(this.label, this.value, this.unit);
 
   final String label;
   final String value;
   final String unit;
-  final String? help;
 }
 
 class _WorkoutView {
@@ -2371,17 +2363,6 @@ class _WorkoutView {
 
   static List<_StatItem> _watchStats(WorkoutDetail detail) {
     final items = <_StatItem>[];
-    final trainingPoints = detail.trainingPoints;
-    if (trainingPoints != null && trainingPoints > 0) {
-      items.add(
-        _StatItem(
-          '训练积分',
-          '$trainingPoints',
-          '',
-          help: '手表上报的训练点数，不是训练负荷、EPOC 或卡路里；目前不做高低评级。',
-        ),
-      );
-    }
     final epoc = detail.epoc;
     if (epoc != null && epoc > 0) {
       items.add(_StatItem('EPOC', '$epoc', ''));
