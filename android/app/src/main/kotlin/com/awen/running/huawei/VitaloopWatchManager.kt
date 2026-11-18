@@ -2590,22 +2590,29 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         }
         ensureGpsParameters()
         watchGpsWorker = Thread({
-            while (watchGpsStreaming && !Thread.currentThread().isInterrupted) {
-                val stopAt = watchGpsStopAt
-                if (stopAt > 0L && System.currentTimeMillis() >= stopAt) {
+            try {
+                while (watchGpsStreaming && !Thread.currentThread().isInterrupted) {
+                    val stopAt = watchGpsStopAt
+                    if (stopAt > 0L && System.currentTimeMillis() >= stopAt) {
+                        doStopWatchGpsStream()
+                        return@Thread
+                    }
+                    val point = watchGpsPoints.poll(
+                        250L,
+                        java.util.concurrent.TimeUnit.MILLISECONDS,
+                    ) ?: continue
+                    val params = gpsParametersResponse
+                    if (params == null) {
+                        ensureGpsParameters()
+                        continue
+                    }
+                    sendGpsPoint(point, params)
+                }
+            } catch (_: InterruptedException) {
+            } finally {
+                if (watchGpsStreaming) {
                     doStopWatchGpsStream()
-                    return@Thread
                 }
-                val point = watchGpsPoints.poll(
-                    250L,
-                    java.util.concurrent.TimeUnit.MILLISECONDS,
-                ) ?: continue
-                val params = gpsParametersResponse
-                if (params == null) {
-                    ensureGpsParameters()
-                    continue
-                }
-                sendGpsPoint(point, params)
             }
         }, "VitaloopWatchGps").apply {
             isDaemon = true
