@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart' hide Text;
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:vitaloop/l10n/localized_text.dart';
 
-import '../data/map_display.dart';
 import '../data/map_offline_service.dart';
+import '../data/map_source_health.dart';
+import '../data/official_map_style.dart';
+import '../data/map_display.dart';
 import '../data/pmtiles_map_style.dart';
 import '../theme/tokens.dart';
 import '../util/coordinate.dart';
@@ -60,6 +64,8 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
   bool _syncing = false;
   bool _syncPending = false;
   bool _styleReady = false;
+  String? _sourceProbeUrl;
+  bool _sourceProbeFailed = false;
 
   /// 前进方向（正北 0°，顺时针）。跟随时让车头朝上。
   double _bearing = 0;
@@ -140,8 +146,37 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
     final settings = MapDisplaySettings.instance;
     final night = Theme.of(context).brightness == Brightness.dark;
     final sourceUrl = settings.pmtilesUrl.trim().isEmpty
-        ? MapDisplaySettings.defaultPmtilesUrl
+        ? officialMapStyleJson
         : settings.pmtilesUrl.trim();
+    var styleString = sourceUrl == officialMapStyleJson
+        ? sourceUrl
+        : pmtilesMapStyleJson(
+            sourceUrl: sourceUrl,
+            night: night,
+            showBaseMap: widget.showBaseMap,
+            demUrl: settings.showTerrain ? settings.effectiveDemUrl : '',
+            contourUrl: settings.showContours
+                ? settings.effectiveContourUrl
+                : '',
+          );
+    if (sourceUrl != officialMapStyleJson &&
+        _sourceProbeUrl != sourceUrl) {
+      _sourceProbeUrl = sourceUrl;
+      _sourceProbeFailed = false;
+      final probeUrl = sourceUrl;
+      unawaited(
+        MapSourceHealth.instance.isReachable(sourceUrl).then((reachable) {
+          if (!mounted || _sourceProbeUrl != probeUrl) return;
+          _sourceProbeFailed = !reachable;
+          if (_sourceProbeFailed) setState(() {});
+        }),
+      );
+    }
+    if (sourceUrl != officialMapStyleJson &&
+        _sourceProbeUrl == sourceUrl &&
+        _sourceProbeFailed) {
+      styleString = officialMapStyleJson;
+    }
     final material = Theme.of(context);
     final map = ClipRRect(
       borderRadius: BorderRadius.circular(widget.radius),
@@ -150,19 +185,11 @@ class _PmtilesRouteMapState extends State<PmtilesRouteMap> {
         width: double.infinity,
         child: ml.MapLibreMap(
           key: ValueKey(
-            '${settings.pmtilesUrl}|$night|${widget.showBaseMap}'
+            '$styleString|$night|${widget.showBaseMap}'
             '|${settings.showTerrain ? settings.effectiveDemUrl : ''}'
             '|${settings.showContours ? settings.effectiveContourUrl : ''}',
           ),
-          styleString: pmtilesMapStyleJson(
-            sourceUrl: sourceUrl,
-            night: night,
-            showBaseMap: widget.showBaseMap,
-            demUrl: settings.showTerrain ? settings.effectiveDemUrl : '',
-            contourUrl: settings.showContours
-                ? settings.effectiveContourUrl
-                : '',
-          ),
+          styleString: styleString,
           initialCameraPosition: const ml.CameraPosition(
             target: ml.LatLng(30.2741, 120.1551),
             zoom: 10.5,
