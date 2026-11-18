@@ -1002,7 +1002,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
           Row(
             children: [
               Text(
-                isCycling ? '踏频与功率' : '跑步动态',
+                isCycling ? '踏频与功率' : '步频',
                 style: VText.h3.copyWith(color: v.ink),
               ),
               const Spacer(),
@@ -1027,6 +1027,38 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
             Text(
               '最高 ${maxCad.round()} ${isCycling ? 'rpm' : 'spm'}',
               style: VText.label.copyWith(fontSize: 10.5, color: v.muted),
+            ),
+          ],
+          if (!isCycling && view.stepLength.points.length > 1) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  '步幅',
+                  style: VText.label.copyWith(
+                    color: v.muted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _dynamicSummary(view.stepLength),
+                  style: VText.label.copyWith(fontSize: 10.5, color: v.muted),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            HeartRateCurve(
+              points: [
+                for (var i = 0; i < view.stepLength.points.length; i++)
+                  Offset(i.toDouble(), view.stepLength.points[i].y),
+              ],
+              height: 70,
+              color: v.peachInk,
+              unit: view.stepLength.unit,
+              valueFormat: (value) =>
+                  value.toStringAsFixed(view.stepLength.decimals),
+              xLabel: (x) => '第 ${x.round() + 1} 个采样',
             ),
           ],
           if (view.power.length > 1) ...[
@@ -1963,6 +1995,7 @@ class _WorkoutView {
     required this.altitude,
     required this.cadence,
     required this.power,
+    required this.stepLength,
     required this.dynamicExtras,
     required this.recovery,
     required this.splits,
@@ -1986,6 +2019,7 @@ class _WorkoutView {
   final _Altitude altitude;
   final List<_SeriesPoint> cadence;
   final List<_SeriesPoint> power;
+  final _DynamicSeries stepLength;
   final List<_DynamicSeries> dynamicExtras;
   final List<int> recovery;
   final List<_Split> splits;
@@ -2074,6 +2108,12 @@ class _WorkoutView {
       ),
       cadence: _downsample(dynamics.cadence, 160),
       power: _downsample(dynamics.power, 160),
+      stepLength: _DynamicSeries(
+        label: dynamics.stepLength.label,
+        unit: dynamics.stepLength.unit,
+        decimals: dynamics.stepLength.decimals,
+        points: _downsample(dynamics.stepLength.points, 160),
+      ),
       dynamicExtras: [
         for (final series in dynamics.extras)
           _DynamicSeries(
@@ -2202,14 +2242,14 @@ class _WorkoutView {
   }
 
   static _Dynamics _parseDynamics(String? json) {
-    if (json == null || json.isEmpty) return const _Dynamics.empty();
+    if (json == null || json.isEmpty) return _Dynamics.empty();
     dynamic decoded;
     try {
       decoded = jsonDecode(json);
     } catch (_) {
-      return const _Dynamics.empty();
+      return _Dynamics.empty();
     }
-    if (decoded is! List) return const _Dynamics.empty();
+    if (decoded is! List) return _Dynamics.empty();
     final cadence = <double>[];
     final power = <double>[];
     final rawExtras = <String, List<double>>{
@@ -2268,7 +2308,6 @@ class _WorkoutView {
       }
 
       return [
-        ?make('sl', '步幅', 'cm', 0),
         ?make('gct', '触地时间', 'ms', 0),
         ?make('ht', '腾空时间', 'ms', 0),
         ?make('vo', '垂直振幅', 'cm', 1),
@@ -2284,6 +2323,15 @@ class _WorkoutView {
         for (var i = 0; i < cadence.length; i++)
           _SeriesPoint(x: i.toDouble(), y: cadence[i]),
       ],
+      stepLength: _DynamicSeries(
+        label: '步幅',
+        unit: 'cm',
+        decimals: 0,
+        points: [
+          for (var i = 0; i < rawExtras['sl']!.length; i++)
+            _SeriesPoint(x: i.toDouble(), y: rawExtras['sl']![i]),
+        ],
+      ),
       power: [
         for (var i = 0; i < power.length; i++)
           _SeriesPoint(x: i.toDouble(), y: power[i]),
@@ -2799,20 +2847,28 @@ class _Dynamics {
   const _Dynamics({
     required this.cadence,
     required this.power,
+    required this.stepLength,
     required this.extras,
     required this.avgCadence,
     required this.avgPower,
   });
 
-  const _Dynamics.empty()
+  _Dynamics.empty()
     : cadence = const [],
       power = const [],
+      stepLength = _DynamicSeries(
+        label: '步幅',
+        unit: 'cm',
+        decimals: 0,
+        points: const [],
+      ),
       extras = const [],
       avgCadence = 0,
       avgPower = 0;
 
   final List<_SeriesPoint> cadence;
   final List<_SeriesPoint> power;
+  final _DynamicSeries stepLength;
   final List<_DynamicSeries> extras;
   final double avgCadence;
   final double avgPower;
