@@ -5,7 +5,9 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.ComponentName
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.location.Location
@@ -191,6 +193,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
 
     companion object {
         private const val TAG = "VitaloopWatch"
+        private const val WATCH_GPS_MAX_DURATION_MS = 120_000L
         private const val DEFAULT_SYNC_START = 946684800 // 2000-01-01
         private const val LAST_SYNC_KEY = "last_sync_start"
         private const val INIT_TIMEOUT_MS = 65_000
@@ -406,9 +409,18 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     @Volatile private var gpsParametersResponse: GpsAndTime.GpsParameters.Response? = null
     @Volatile private var watchGpsStreaming = false
     @Volatile private var watchGpsStopAt = 0L
+    @Volatile private var watchGpsStartedAtMs = 0L
     private var watchGpsWorker: Thread? = null
     private val watchGpsPoints = java.util.concurrent.LinkedBlockingQueue<JSONObject>()
     @Volatile private var lastStreamedLocation: Location? = null
+    private var screenStateReceiverRegistered = false
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                stopWatchGpsStream(graceMs = 0L)
+            }
+        }
+    }
     private val watchGpsPointListener: (JSONObject) -> Unit = { point ->
         if (watchGpsStreaming) {
             watchGpsPoints.offer(point)
@@ -627,6 +639,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         GBApplication.init(appContext)
         cameraRemoteEnabled = watchPrefs().getBoolean(KEY_CAMERA_REMOTE, false)
         findPhoneEnabled = watchPrefs().getBoolean(KEY_FIND_PHONE, true)
+        registerScreenStateReceiver()
     }
 
     @Synchronized
@@ -2579,6 +2592,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             return
         }
         watchGpsStreaming = true
+        watchGpsStartedAtMs = System.currentTimeMillis()
         lastStreamedLocation = null
         watchGpsPoints.clear()
         gps.addPointListener(watchGpsPointListener)
@@ -2593,7 +2607,15 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
             try {
                 while (watchGpsStreaming && !Thread.currentThread().isInterrupted) {
                     val stopAt = watchGpsStopAt
+                    val startedAt = watchGpsStartedAtMs
                     if (stopAt > 0L && System.currentTimeMillis() >= stopAt) {
+                        doStopWatchGpsStream()
+                        return@Thread
+                    }
+                    if (startedAt <= 0L ||
+                        System.currentTimeMillis() - startedAt >= WATCH_GPS_MAX_DURATION_MS
+                    ) {
+                        FileLogger.w(TAG, "watch GPS stream timed out after ${WATCH_GPS_MAX_DURATION_MS / 1000}s")
                         doStopWatchGpsStream()
                         return@Thread
                     }
@@ -2639,6 +2661,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         if (!watchGpsStreaming) return
         watchGpsStreaming = false
         watchGpsStopAt = 0L
+        watchGpsStartedAtMs = 0L
         watchGpsWorker?.interrupt()
         watchGpsWorker = null
         watchGpsPoints.clear()
@@ -2648,6 +2671,19 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         gps.stop("watch-gps")
         addLog("停止下发手机定位")
         FileLogger.i(TAG, "watch GPS stream stopped")
+    }
+
+    private fun registerScreenStateReceiver() {
+        if (screenStateReceiverRegistered) return
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF).apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            appContext.registerReceiver(screenStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            appContext.registerReceiver(screenStateReceiver, filter)
+        }
+        screenStateReceiverRegistered = true
     }
 
     private fun sendGpsPoint(point: JSONObject, params: GpsAndTime.GpsParameters.Response) {

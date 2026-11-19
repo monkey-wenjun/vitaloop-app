@@ -123,7 +123,7 @@ class VitaloopGpsManager private constructor(private val context: Context) {
 
     /**
      * 一次性取当前位置，供天气同步等短任务使用。优先用 10 分钟内的缓存点，
-     * 否则等一次定位回调，超时后退回任意 lastKnown。
+     * 否则只请求低功耗网络定位，超时后退回任意 lastKnown。
      */
     fun currentLocation(timeoutMs: Long = 8_000L): Location? {
         if (!hasPermissions()) return null
@@ -137,15 +137,13 @@ class VitaloopGpsManager private constructor(private val context: Context) {
             return cached
         }
 
-        val providers = buildList {
-            if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                add(LocationManager.GPS_PROVIDER)
-            }
-            if (manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                add(LocationManager.NETWORK_PROVIDER)
-            }
+        val provider = when {
+            manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) ->
+                LocationManager.NETWORK_PROVIDER
+            manager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER) ->
+                LocationManager.PASSIVE_PROVIDER
+            else -> return cached
         }
-        if (providers.isEmpty()) return cached
 
         val latch = CountDownLatch(1)
         val result = AtomicReference<Location?>()
@@ -153,9 +151,7 @@ class VitaloopGpsManager private constructor(private val context: Context) {
             if (result.compareAndSet(null, location)) latch.countDown()
         }
         return try {
-            for (provider in providers) {
-                manager.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
-            }
+            manager.requestLocationUpdates(provider, 1_000L, 0f, listener, Looper.getMainLooper())
             latch.await(timeoutMs.coerceIn(1_000L, 20_000L), TimeUnit.MILLISECONDS)
             result.get() ?: cached
         } catch (_: Exception) {
