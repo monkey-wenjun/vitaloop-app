@@ -410,13 +410,15 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     @Volatile private var watchGpsStreaming = false
     @Volatile private var watchGpsStopAt = 0L
     @Volatile private var watchGpsStartedAtMs = 0L
+    @Volatile private var screenOff = false
     private var watchGpsWorker: Thread? = null
     private val watchGpsPoints = java.util.concurrent.LinkedBlockingQueue<JSONObject>()
     @Volatile private var lastStreamedLocation: Location? = null
     private var screenStateReceiverRegistered = false
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+            screenOff = intent?.action == Intent.ACTION_SCREEN_OFF
+            if (screenOff) {
                 stopWatchGpsStream(graceMs = 0L)
             }
         }
@@ -2559,7 +2561,22 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         val gps = VitaloopGpsManager.getInstance(appContext)
         if (!gps.hasPermissions()) return
         Thread({
-            val location = gps.currentLocation(8_000) ?: return@Thread
+            val location = gps.lastKnown()?.let { cached ->
+                JSONObject(cached).takeIf {
+                    System.currentTimeMillis() - it.optLong("ts", 0L) <= 10 * 60_000L
+                }?.let { json ->
+                    val cachedLatitude = json.optDouble("lat", Double.NaN)
+                    val cachedLongitude = json.optDouble("lon", Double.NaN)
+                    if (cachedLatitude.isNaN() || cachedLongitude.isNaN()) {
+                        null
+                    } else {
+                        Location("vitaloop-cached").apply {
+                            latitude = cachedLatitude
+                            longitude = cachedLongitude
+                        }
+                    }
+                }
+            } ?: return@Thread
             try {
                 SendGpsAndTimeToDeviceRequest(
                     this,
@@ -2582,6 +2599,10 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     }
 
     private fun startWatchGpsStream() {
+        if (screenOff) {
+            FileLogger.i(TAG, "watch GPS stream skipped: screen off")
+            return
+        }
         watchGpsStopAt = 0L
         if (watchGpsStreaming) return
         if (state != "ready" || transport == null) return
