@@ -536,6 +536,17 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _syncCloudNow({bool mergeRemote = true}) async {
+    try {
+      await _doSyncCloudNow(mergeRemote: mergeRemote);
+    } on CloudException catch (e) {
+      if (e.status != 401) rethrow;
+      _stopCloudAutoSync();
+      cloudStatus = '云端登录已过期，请重新登录';
+      notifyListeners();
+    }
+  }
+
+  Future<void> _doSyncCloudNow({bool mergeRemote = true}) async {
     final token = _cloudToken;
     if (token == null || token.isEmpty) return;
     final sw = Stopwatch()..start();

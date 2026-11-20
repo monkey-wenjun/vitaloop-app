@@ -2243,6 +2243,7 @@ pub fn running_index_history(limit: i64) -> Result<Vec<RunningIndexPoint>> {
 
 pub fn list_workouts(filter: &str, limit: i64) -> Result<Vec<WorkoutSummary>> {
     with_conn(|conn| {
+        let limit = if limit <= 0 { -1 } else { limit };
         let where_clause = match filter {
             "watch" => "WHERE source = 'watch'",
             "phone" => "WHERE source = 'phone'",

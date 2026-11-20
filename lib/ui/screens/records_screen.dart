@@ -320,26 +320,26 @@ class _WorkoutRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final start = DateTime.fromMillisecondsSinceEpoch(workout.startMs);
-    return Dismissible(
-      key: ValueKey('workout-${workout.id}'),
-      direction: DismissDirection.endToStart,
-      dismissThresholds: const {DismissDirection.endToStart: 1.0},
-      confirmDismiss: (_) async => false,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        decoration: BoxDecoration(
-          color: context.v.danger,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: GestureDetector(
-          onTap: () => _confirmDelete(context),
-          behavior: HitTestBehavior.opaque,
+    return GestureDetector(
+      onHorizontalDragEnd: (_) {},
+      child: Dismissible(
+        key: ValueKey('workout-${workout.id}'),
+        direction: DismissDirection.endToStart,
+        dismissThresholds: const {DismissDirection.endToStart: 0.7},
+        movementDuration: const Duration(milliseconds: 180),
+        confirmDismiss: (_) => _confirmDelete(context),
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 24),
+          decoration: BoxDecoration(
+            color: context.v.danger,
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.delete_outline_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 6),
+              SizedBox(width: 8),
               Text(
                 '删除',
                 style: TextStyle(
@@ -351,18 +351,18 @@ class _WorkoutRow extends StatelessWidget {
             ],
           ),
         ),
-      ),
-      child: VRowItem(
-        icon: sportIcon(workout.sport),
-        iconBackground: sportTint(context, workout.sport),
-        iconColor: sportInk(context, workout.sport),
-        title: sportName(workout.sport),
-        subtitle:
-            '${relativeDay(start)} ${clock(start)} · ${fmtDistance(workout.distanceM)}',
-        badge: workout.synced ? null : '待同步',
-        value: fmtDuration(workout.durationSec),
-        valueSub: '${fmtInt(workout.calories)} kcal',
-        onTap: () => _open(context),
+        child: VRowItem(
+          icon: sportIcon(workout.sport),
+          iconBackground: sportTint(context, workout.sport),
+          iconColor: sportInk(context, workout.sport),
+          title: sportName(workout.sport),
+          subtitle:
+              '${relativeDay(start)} ${clock(start)} · ${fmtDistance(workout.distanceM)}',
+          badge: workout.synced ? null : '待同步',
+          value: fmtDuration(workout.durationSec),
+          valueSub: '${fmtInt(workout.calories)} kcal',
+          onTap: () => _open(context),
+        ),
       ),
     );
   }

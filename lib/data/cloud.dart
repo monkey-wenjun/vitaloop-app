@@ -320,20 +320,21 @@ class CloudApi {
         throw CloudException(_friendly(detail), status: res.statusCode);
       }
       return text;
-    } on CloudException {
-      rethrow;
     } catch (error, stackTrace) {
       debugCloudTrace(
         'error $method $path in ${stopwatch.elapsedMilliseconds}ms '
         '$error\n$stackTrace',
       );
+      if (error is TimeoutException) {
+        throw const CloudException('连接云端超时');
+      }
+      if (error is SocketException) {
+        throw const CloudException('连不上云端，请检查网络');
+      }
+      if (error is HandshakeException) {
+        throw const CloudException('云端 HTTPS 握手失败');
+      }
       rethrow;
-    } on TimeoutException {
-      throw const CloudException('连接云端超时');
-    } on SocketException {
-      throw const CloudException('连不上云端，请检查网络');
-    } on HandshakeException {
-      throw const CloudException('云端 HTTPS 握手失败');
     } finally {
       client.close(force: true);
     }
