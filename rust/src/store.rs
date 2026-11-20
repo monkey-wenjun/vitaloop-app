@@ -2250,7 +2250,10 @@ pub fn list_workouts(filter: &str, limit: i64) -> Result<Vec<WorkoutSummary>> {
             _ => "",
         };
         let mut stmt = conn.prepare(&format!(
-            "SELECT * FROM workouts {where_clause} ORDER BY start_ms DESC LIMIT ?1"
+            "SELECT id, sport, source, start_ms, end_ms, distance_m, calories,
+                    avg_hr, max_hr, steps, load, synced
+             FROM workouts {where_clause}
+             ORDER BY start_ms DESC LIMIT ?1"
         ))?;
         let rows = stmt.query_map(params![limit], workout_from_row)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

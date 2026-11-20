@@ -121,7 +121,7 @@ class AppState extends ChangeNotifier {
     final results = await Future.wait([
       VitaloopApi.home(),
       VitaloopApi.sleep(),
-      VitaloopApi.workouts(limit: 500),
+      VitaloopApi.workouts(limit: 0),
       VitaloopApi.devices(),
       VitaloopApi.profile(),
       VitaloopApi.weights(limit: 120),

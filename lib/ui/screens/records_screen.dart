@@ -23,7 +23,6 @@ class RecordsScreen extends StatefulWidget {
 
 class _RecordsScreenState extends State<RecordsScreen> {
   int _filter = 0;
-  final Set<String> _hidden = {};
   static const _filters = ['全部', '跑步', '骑行', '徒步', '游泳', '力量'];
 
   bool _matches(WorkoutSummary w) {
@@ -47,9 +46,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
   @override
   Widget build(BuildContext context) {
     final v = context.v;
-    final all = widget.state.workouts
-        .where((w) => !_hidden.contains(w.id))
-        .toList();
+    final all = widget.state.workouts.toList();
     final filtered = all.where(_matches).toList();
     // 汇总卡 = 当前筛选范围的所有时间合计（用户明确要求「全部」下显示所有时间的汇总）
     final allDistance = filtered.fold<double>(0, (sum, w) => sum + w.distanceM);
@@ -205,11 +202,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
             child: Column(
               children: [
                 for (final w in entry.value)
-                  _WorkoutRow(
-                    workout: w,
-                    onDeleted: _reload,
-                    onHidden: () => setState(() => _hidden.add(w.id)),
-                  ),
+                  _WorkoutRow(workout: w, onDeleted: _reload),
               ],
             ),
           ),
@@ -276,15 +269,10 @@ class _Summary extends StatelessWidget {
 }
 
 class _WorkoutRow extends StatelessWidget {
-  const _WorkoutRow({
-    required this.workout,
-    required this.onDeleted,
-    required this.onHidden,
-  });
+  const _WorkoutRow({required this.workout, required this.onDeleted});
 
   final WorkoutSummary workout;
   final Future<void> Function() onDeleted;
-  final VoidCallback onHidden;
 
   Future<void> _open(BuildContext context) async {
     final removed = await Navigator.of(context).push<bool>(
@@ -318,6 +306,7 @@ class _WorkoutRow extends StatelessWidget {
     if (ok != true || !context.mounted) return false;
     try {
       await VitaloopApi.deleteWorkout(workout.id);
+      await onDeleted();
       return true;
     } catch (e) {
       if (context.mounted) {
@@ -334,14 +323,8 @@ class _WorkoutRow extends StatelessWidget {
     return Dismissible(
       key: ValueKey('workout-${workout.id}'),
       direction: DismissDirection.endToStart,
-      dismissThresholds: const {DismissDirection.endToStart: 0.8},
-      confirmDismiss: (_) => _confirmDelete(context),
-      onDismissed: (_) {
-        onHidden();
-        onDeleted();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('运动记录已删除')));
-      },
+      dismissThresholds: const {DismissDirection.endToStart: 1.0},
+      confirmDismiss: (_) async => false,
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
@@ -349,20 +332,24 @@ class _WorkoutRow extends StatelessWidget {
           color: context.v.danger,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.delete_outline_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 6),
-            Text(
-              '删除',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
+        child: GestureDetector(
+          onTap: () => _confirmDelete(context),
+          behavior: HitTestBehavior.opaque,
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_outline_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 6),
+              Text(
+                '删除',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       child: VRowItem(
