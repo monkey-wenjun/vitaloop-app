@@ -333,7 +333,7 @@ class _WorkoutRowState extends State<_WorkoutRow> {
     final start = DateTime.fromMillisecondsSinceEpoch(workout.startMs);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxDrag = constraints.maxWidth * 0.55;
+        final maxDrag = constraints.maxWidth * 0.72;
         final offset = _dragOffset.clamp(-maxDrag, 0.0);
         return GestureDetector(
           onHorizontalDragUpdate: (details) {
@@ -347,7 +347,7 @@ class _WorkoutRowState extends State<_WorkoutRow> {
           },
           onHorizontalDragEnd: (details) async {
             final velocity = details.velocity.pixelsPerSecond.dx;
-            final deliberate = offset <= -maxDrag * 0.55 && velocity <= -900;
+            final deliberate = offset <= -maxDrag * 0.72 && velocity <= -900;
             if (deliberate) {
               setState(() => _dragOffset = 0);
               await _confirmDelete(context);
