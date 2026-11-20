@@ -5,10 +5,10 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use rusqlite::types::Value;
 use rusqlite::OptionalExtension;
-use serde_json::Value as JsonValue;
 use serde_json::{json, Map, Number, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
+use std::io::Read;
 
 use crate::store;
 
@@ -61,6 +61,13 @@ const PRIVATE_SETTINGS: &[&str] = &[
     "p2p_backfill_done",
     "legacy_extra_backfill_done",
     "legacy_backfill_v2_done",
+    "watch_auth_key",
+    "watch_name",
+    "watch_address",
+    "huawei_account",
+    "huawei_address",
+    "fake_android_id",
+    "account_vault_key",
 ];
 
 const CREDENTIAL_SETTINGS: &[&str] = &[
@@ -76,6 +83,7 @@ const CREDENTIAL_SETTINGS: &[&str] = &[
     "huawei_account",
     "huawei_address",
     "fake_android_id",
+    "account_vault_key",
 ];
 
 const ACCOUNT_KEY_SETTING: &str = "account_vault_key";
@@ -94,9 +102,9 @@ fn sha256_bytes(parts: &[&[u8]]) -> [u8; 32] {
 }
 
 fn random_bytes(count: usize) -> Result<Vec<u8>> {
-    use rand::RngCore;
     let mut out = vec![0_u8; count];
-    rand::rng().fill_bytes(&mut out);
+    std::fs::File::open("/dev/urandom")?
+        .read_exact(&mut out)?;
     Ok(out)
 }
 
@@ -112,7 +120,7 @@ fn derive_wrap_key(password: &str, salt: &[u8]) -> [u8; 32] {
 fn seal_aead(key: &[u8; 32], nonce: &[u8], plaintext: &[u8], associated: &[u8]) -> Result<Vec<u8>> {
     let cipher = Aes256Gcm::new(key.into());
     cipher
-        .encrypt(Nonce::try_from(nonce)?, Payload {
+        .encrypt(&Nonce::try_from(nonce)?, Payload {
             msg: plaintext,
             aad: associated,
         })
@@ -122,7 +130,7 @@ fn seal_aead(key: &[u8; 32], nonce: &[u8], plaintext: &[u8], associated: &[u8]) 
 fn open_aead(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], associated: &[u8]) -> Result<Vec<u8>> {
     let cipher = Aes256Gcm::new(key.into());
     cipher
-        .decrypt(Nonce::try_from(nonce)?, Payload {
+        .decrypt(&Nonce::try_from(nonce)?, Payload {
             msg: ciphertext,
             aad: associated,
         })
@@ -238,7 +246,7 @@ fn decrypt_account_vault(payload: &str, password: &str) -> Result<JsonValue> {
     if version != Some(ACCOUNT_KEY_VERSION.into()) {
         return Err(anyhow::anyhow!("unsupported account vault version"));
     }
-    let account_key = decrypt_account_key(&parsed, password)?;
+    let wrapped_key = decrypt_account_key(&parsed, password)?;
     let data = parsed
         .get("data")
         .ok_or_else(|| anyhow::anyhow!("missing vault data"))?;
@@ -248,9 +256,18 @@ fn decrypt_account_vault(payload: &str, password: &str) -> Result<JsonValue> {
             .and_then(|item| BASE64.decode(item).ok())
             .ok_or_else(|| anyhow::anyhow!("invalid vault data {name}"))
     };
+    let data_salt = decode("salt")?;
+    if data_salt.len() != 16 {
+        return Err(anyhow::anyhow!("invalid vault data salt"));
+    }
+    let data_key = sha256_bytes(&[
+        b"vitaloop-account-data-v1",
+        &data_salt,
+        &wrapped_key,
+    ]);
     let associated = json_blob(&json!({"v": version.unwrap_or(0)}))?;
     let plaintext = open_aead(
-        &account_key,
+        &data_key,
         &decode("nonce")?,
         &decode("blob")?,
         &associated,
@@ -260,10 +277,19 @@ fn decrypt_account_vault(payload: &str, password: &str) -> Result<JsonValue> {
 
 pub fn import_account_vault(payload: String, password: String) -> Result<usize> {
     let vault = decrypt_account_vault(&payload, &password)?;
+    const SESSION_SETTINGS: &[&str] = &[
+        "signed_in",
+        "guest",
+        "cloud_account_id",
+        "cloud_token",
+        "account_vault_key",
+    ];
     let mut imported = 0_usize;
     if let Some(credentials) = vault.get("credentials").and_then(JsonValue::as_object) {
         for (key, value) in credentials {
-            if CREDENTIAL_SETTINGS.contains(&key.as_str()) {
+            if CREDENTIAL_SETTINGS.contains(&key.as_str())
+                && !SESSION_SETTINGS.contains(&key.as_str())
+            {
                 if let Some(value) = value.as_str() {
                     store::settings_set(key, value)?;
                     imported += 1;
@@ -901,6 +927,59 @@ pub fn account_data_change_count() -> Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn account_vault_roundtrip_and_excludes_profile_from_health_snapshot() {
+        let _guard = store::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path =
+            std::env::temp_dir().join(format!("vitaloop-vault-roundtrip-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        store::open(path.to_str().unwrap()).unwrap();
+        store::save_profile(crate::api::types::Profile {
+            nickname: "阿文".into(),
+            gender: "male".into(),
+            height_cm: 177.0,
+            weight_kg: 70.5,
+            birth_date: "1990-01-01".into(),
+            email: "test@example.com".into(),
+            avatar: "data:image/png;base64,AAA".into(),
+        })
+        .unwrap();
+        store::settings_set("watch_auth_key", "secret-watch-key").unwrap();
+
+        let health = export_account_data().unwrap();
+        assert!(!health.contains("阿文"), "profile must not be uploaded in plaintext");
+        assert!(
+            !health.contains("watch_auth_key"),
+            "credentials must not be uploaded in plaintext"
+        );
+
+        let vault = export_account_vault("correct-password".into()).unwrap();
+        assert!(!vault.contains("阿文"), "vault payload must be ciphertext");
+        assert!(!vault.contains("secret-watch-key"), "vault payload must be ciphertext");
+
+        store::save_profile(crate::api::types::Profile {
+            nickname: String::new(),
+            gender: "female".into(),
+            height_cm: 0.0,
+            weight_kg: 0.0,
+            birth_date: String::new(),
+            email: String::new(),
+            avatar: String::new(),
+        })
+        .unwrap();
+        store::settings_set("watch_auth_key", "").unwrap();
+        import_account_vault(vault.clone(), "correct-password".into()).unwrap();
+
+        let restored = store::get_profile().unwrap();
+        assert_eq!(restored.nickname, "阿文");
+        assert_eq!(restored.height_cm, 177.0);
+        assert_eq!(restored.email, "test@example.com");
+        assert_eq!(store::settings_get("watch_auth_key", "").unwrap(), "secret-watch-key");
+
+        assert!(import_account_vault(vault, "wrong-password".into()).is_err());
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[test]
     fn blob_roundtrip_shape() {

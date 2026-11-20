@@ -24,6 +24,7 @@ class AppState extends ChangeNotifier {
   DateTime? cloudLastSync;
   String cloudServer = CloudApi.defaultBase;
   String? _cloudToken;
+  String? _sessionPassword;
   int? _cloudChangeBase;
   Timer? _cloudTimer;
   static const _cloudSyncInterval = Duration(minutes: 1);
@@ -340,13 +341,19 @@ class AppState extends ChangeNotifier {
       signedIn = true;
       accountEmail = account.email;
       _cloudToken = account.token;
+      _sessionPassword = password;
       await VitaloopApi.setSetting('signed_in', '1');
       await VitaloopApi.setSetting('account_email', account.email);
       await VitaloopApi.setSetting('cloud_account_id', account.accountId);
       await VitaloopApi.setSetting('cloud_token', account.token);
-      await _pullCloudProfile(account.token);
+      await _restoreAccountVault(
+        token: account.token,
+        password: password,
+        email: account.email,
+      );
       _ensureCloudAutoSync();
       await _syncCloudNow();
+      _sessionPassword = null;
     } catch (e) {
       cloudStatus = e.toString();
       rethrow;
@@ -386,13 +393,19 @@ class AppState extends ChangeNotifier {
       signedIn = true;
       accountEmail = account.email;
       _cloudToken = account.token;
+      _sessionPassword = newPassword;
       await VitaloopApi.setSetting('signed_in', '1');
       await VitaloopApi.setSetting('account_email', account.email);
       await VitaloopApi.setSetting('cloud_account_id', account.accountId);
       await VitaloopApi.setSetting('cloud_token', account.token);
-      await _pullCloudProfile(account.token);
+      await _restoreAccountVault(
+        token: account.token,
+        password: newPassword,
+        email: account.email,
+      );
       _ensureCloudAutoSync();
       await _syncCloudNow();
+      _sessionPassword = null;
     } catch (e) {
       cloudStatus = e.toString();
       rethrow;
@@ -666,11 +679,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     if (signedIn && _cloudToken?.isNotEmpty == true) {
       try {
-        await CloudApi.saveProfile(
-          _cloudToken!,
-          next.nickname,
-          next.avatar,
-        );
+        if (_sessionPassword case final String password) {
+          await _uploadAccountVault(token: _cloudToken!, password: password);
+          _sessionPassword = null;
+        }
         cloudStatus = '云端已同步';
       } catch (e) {
         cloudStatus = '个人资料云同步失败：$e';
@@ -679,23 +691,55 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> _pullCloudProfile(String token) async {
-    final cloudProfile = await CloudApi.profile(token);
-    final current = profile ?? await VitaloopApi.profile();
-    final next = Profile(
-      nickname: cloudProfile.nickname.isNotEmpty
-          ? cloudProfile.nickname
-          : current.nickname,
-      gender: current.gender,
-      heightCm: current.heightCm,
-      weightKg: current.weightKg,
-      birthDate: current.birthDate,
-      email: current.email,
-      avatar: cloudProfile.avatar,
-    );
-    await VitaloopApi.saveProfile(next);
-    profile = next;
+  Future<void> _restoreAccountVault({
+    required String token,
+    required String password,
+    required String email,
+  }) async {
+    final vault = await CloudApi.vault(token);
+    if (vault.data case final String payload when payload.isNotEmpty) {
+      try {
+        await VitaloopApi.importAccountVault(
+          payload: payload,
+          password: password,
+        );
+      } catch (_) {
+        await _uploadAccountVault(token: token, password: password);
+      }
+    } else {
+      await _uploadAccountVault(token: token, password: password);
+    }
+    final current = await VitaloopApi.profile();
+    if (current.email.isEmpty) {
+      final restored = Profile(
+        nickname: current.nickname.isEmpty
+            ? _nickFromEmail(email)
+            : current.nickname,
+        gender: current.gender,
+        heightCm: current.heightCm,
+        weightKg: current.weightKg,
+        birthDate: current.birthDate,
+        email: email,
+        avatar: current.avatar,
+      );
+      await VitaloopApi.saveProfile(restored);
+      await _uploadAccountVault(token: token, password: password);
+      profile = restored;
+    } else {
+      profile = current;
+    }
     notifyListeners();
+  }
+
+  Future<void> _uploadAccountVault({
+    required String token,
+    required String password,
+  }) async {
+    final vault = await VitaloopApi.exportAccountVault(password: password);
+    final keyBackup = await VitaloopApi.exportAccountKeyBackup(
+      password: password,
+    );
+    await CloudApi.saveVault(token, vault, keyBackup);
   }
 
   static String _nickFromEmail(String email) {

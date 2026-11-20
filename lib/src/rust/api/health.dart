@@ -444,6 +444,25 @@ Future<String> ingestWatchData({required String eventsJson}) =>
 Future<String> exportAccountData() =>
     RustLib.instance.api.crateApiHealthExportAccountData();
 
+/// 导出密码加密的账号资料与凭据。服务端只见密文，密码不出本机。
+Future<String> exportAccountVault({required String password}) =>
+    RustLib.instance.api.crateApiHealthExportAccountVault(password: password);
+
+/// 解密并导入云端账号资料与凭据。
+Future<PlatformInt64> importAccountVault({
+  required String payload,
+  required String password,
+}) => RustLib.instance.api.crateApiHealthImportAccountVault(
+  payload: payload,
+  password: password,
+);
+
+/// 导出密码加密的数据密钥备份；用于服务端无法解密的账号级恢复。
+Future<String> exportAccountKeyBackup({required String password}) => RustLib
+    .instance
+    .api
+    .crateApiHealthExportAccountKeyBackup(password: password);
+
 /// 把云端健康快照合并回本机；返回写入行数。
 Future<PlatformInt64> importAccountData({required String payload}) =>
     RustLib.instance.api.crateApiHealthImportAccountData(payload: payload);

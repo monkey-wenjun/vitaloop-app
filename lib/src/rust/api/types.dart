@@ -1037,6 +1037,9 @@ class Profile {
     required this.avatar,
   });
 
+  static Future<Profile> default_() =>
+      RustLib.instance.api.crateApiTypesProfileDefault();
+
   @override
   int get hashCode =>
       nickname.hashCode ^
@@ -1240,6 +1243,9 @@ class ReadinessScore {
     required this.recoveryMinutes,
     required this.computedAtMs,
   });
+
+  static Future<ReadinessScore> default_() =>
+      RustLib.instance.api.crateApiTypesReadinessScoreDefault();
 
   @override
   int get hashCode =>

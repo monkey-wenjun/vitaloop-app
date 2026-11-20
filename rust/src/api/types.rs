@@ -61,6 +61,8 @@ pub struct HomeSummary {
     pub device_connected: bool,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[serde(default)]
 pub struct ReadinessScore {
     pub total: i64,
     pub level: String,
@@ -337,6 +339,7 @@ pub struct SleepSummary {
     pub score: i64,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
 pub struct Profile {
     pub nickname: String,
     pub gender: String,
