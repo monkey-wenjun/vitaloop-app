@@ -268,17 +268,28 @@ class _Summary extends StatelessWidget {
   }
 }
 
-class _WorkoutRow extends StatelessWidget {
+class _WorkoutRow extends StatefulWidget {
   const _WorkoutRow({required this.workout, required this.onDeleted});
 
   final WorkoutSummary workout;
   final Future<void> Function() onDeleted;
 
+  @override
+  State<_WorkoutRow> createState() => _WorkoutRowState();
+}
+
+class _WorkoutRowState extends State<_WorkoutRow> {
+  double _dragOffset = 0;
+
+  WorkoutSummary get workout => widget.workout;
+
+  Future<void> Function() get onDeleted => widget.onDeleted;
+
   Future<void> _open(BuildContext context) async {
     final removed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => WorkoutDetailScreen(id: workout.id)),
     );
-    if (removed == true) await onDeleted();
+    if (removed == true) await widget.onDeleted();
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {
@@ -320,50 +331,78 @@ class _WorkoutRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final start = DateTime.fromMillisecondsSinceEpoch(workout.startMs);
-    return GestureDetector(
-      onHorizontalDragEnd: (_) {},
-      child: Dismissible(
-        key: ValueKey('workout-${workout.id}'),
-        direction: DismissDirection.endToStart,
-        dismissThresholds: const {DismissDirection.endToStart: 0.7},
-        movementDuration: const Duration(milliseconds: 180),
-        confirmDismiss: (_) => _confirmDelete(context),
-        background: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 24),
-          decoration: BoxDecoration(
-            color: context.v.danger,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxDrag = constraints.maxWidth * 0.55;
+        final offset = _dragOffset.clamp(-maxDrag, 0.0);
+        return GestureDetector(
+          onHorizontalDragUpdate: (details) {
+            if (details.primaryDelta == null) return;
+            setState(() {
+              _dragOffset = (_dragOffset + details.primaryDelta!).clamp(
+                -maxDrag,
+                0.0,
+              );
+            });
+          },
+          onHorizontalDragEnd: (details) async {
+            final velocity = details.velocity.pixelsPerSecond.dx;
+            final deliberate = offset <= -maxDrag * 0.55 && velocity <= -900;
+            if (deliberate) {
+              setState(() => _dragOffset = 0);
+              await _confirmDelete(context);
+            } else {
+              setState(() => _dragOffset = 0);
+            }
+          },
+          child: Stack(
             children: [
-              Icon(Icons.delete_outline_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 8),
-              Text(
-                '删除',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
+              Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 24),
+                decoration: BoxDecoration(
+                  color: context.v.danger,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      '删除',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Transform.translate(
+                offset: Offset(offset, 0),
+                child: VRowItem(
+                  icon: sportIcon(workout.sport),
+                  iconBackground: sportTint(context, workout.sport),
+                  iconColor: sportInk(context, workout.sport),
+                  title: sportName(workout.sport),
+                  subtitle:
+                      '${relativeDay(start)} ${clock(start)} · ${fmtDistance(workout.distanceM)}',
+                  badge: workout.synced ? null : '待同步',
+                  value: fmtDuration(workout.durationSec),
+                  valueSub: '${fmtInt(workout.calories)} kcal',
+                  onTap: () => _open(context),
                 ),
               ),
             ],
           ),
-        ),
-        child: VRowItem(
-          icon: sportIcon(workout.sport),
-          iconBackground: sportTint(context, workout.sport),
-          iconColor: sportInk(context, workout.sport),
-          title: sportName(workout.sport),
-          subtitle:
-              '${relativeDay(start)} ${clock(start)} · ${fmtDistance(workout.distanceM)}',
-          badge: workout.synced ? null : '待同步',
-          value: fmtDuration(workout.durationSec),
-          valueSub: '${fmtInt(workout.calories)} kcal',
-          onTap: () => _open(context),
-        ),
-      ),
+        );
+      },
     );
   }
 }
