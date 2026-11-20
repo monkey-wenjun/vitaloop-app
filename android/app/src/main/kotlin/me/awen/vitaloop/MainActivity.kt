@@ -2,8 +2,13 @@ package me.awen.vitaloop
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.pm.PackageInstaller
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.ClipData
 import android.content.ContentValues
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -63,6 +68,7 @@ class MainActivity : FlutterActivity() {
     private var ttsReady = false
     private var pendingTtsText: String? = null
     @Volatile private var updateDownloading = false
+    private var installStatusReceiver: BroadcastReceiver? = null
     private val updateClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.MINUTES)
@@ -225,6 +231,23 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        installStatusReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val status = intent.getIntExtra(
+                    PackageInstaller.EXTRA_STATUS,
+                    PackageInstaller.STATUS_FAILURE,
+                )
+                val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                    ?: if (status == PackageInstaller.STATUS_SUCCESS) "更新完成" else "安装失败"
+                Log.i("VitaloopUpdate", "install status $status: $message")
+            }
+        }
+        registerReceiver(
+            installStatusReceiver,
+            IntentFilter(ACTION_INSTALL_STATUS),
+            Context.RECEIVER_NOT_EXPORTED,
+        )
 
         val manager = VitaloopWatchManager.getInstance(applicationContext)
         watchManager = manager
@@ -1553,29 +1576,41 @@ wanted.add(android.Manifest.permission.READ_CONTACTS)
 
                 runOnUiThread {
                     try {
-                        val uri = FileProvider.getUriForFile(
-                            this,
-                            "$packageName.fileprovider",
-                            apkFile,
-                        )
-                        startActivity(
-                            Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, "application/vnd.android.package-archive")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                        )
+                        installWithPackageInstaller(apkFile)
                     } catch (e: Exception) {
                         Log.e("VitaloopUpdate", "install failed", e)
                     }
                 }
-                finish(true, "已拉起系统安装器", archive.versionName)
+                finish(true, "正在提交系统安装", archive.versionName)
             } catch (e: Exception) {
                 target?.delete()
                 Log.e("VitaloopUpdate", "download failed", e)
                 finish(false, e.message ?: "下载或安装失败")
             }
         }.start()
+    }
+
+    private fun installWithPackageInstaller(apkFile: File) {
+        val packageInstaller = packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(
+            PackageInstaller.SessionParams.MODE_FULL_INSTALL,
+        )
+        val sessionId = packageInstaller.createSession(params)
+        packageInstaller.openSession(sessionId).use { session ->
+            session.openWrite("vitaloop_update.apk", 0, apkFile.length()).use { output ->
+                apkFile.inputStream().use { input ->
+                    input.copyTo(output)
+                }
+            }
+            val statusIntent = Intent(ACTION_INSTALL_STATUS).setPackage(packageName)
+            val pendingIntent = PendingIntent.getBroadcast(
+                this,
+                6034,
+                statusIntent,
+                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            session.commit(pendingIntent.intentSender)
+        }
     }
 
     private fun saveImageToGallery(name: String, mime: String, bytes: ByteArray): Boolean {
@@ -1620,6 +1655,10 @@ wanted.add(android.Manifest.permission.READ_CONTACTS)
 
     override fun onDestroy() {
         // 只解绑回调，不断链路：Activity 销毁后由 WatchSyncService 继续持有连接
+        installStatusReceiver?.let { receiver ->
+            unregisterReceiver(receiver)
+            installStatusReceiver = null
+        }
         eventSink = null
         watchManager?.onState = null
         watchManager?.onEvent = null
@@ -1638,3 +1677,5 @@ wanted.add(android.Manifest.permission.READ_CONTACTS)
         super.onDestroy()
     }
 }
+
+private const val ACTION_INSTALL_STATUS = "me.awen.vitaloop.INSTALL_STATUS"
