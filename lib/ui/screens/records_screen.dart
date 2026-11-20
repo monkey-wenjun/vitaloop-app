@@ -347,7 +347,9 @@ class _WorkoutRowState extends State<_WorkoutRow> {
           },
           onHorizontalDragEnd: (details) async {
             final velocity = details.velocity.pixelsPerSecond.dx;
-            final deliberate = offset <= -maxDrag * 0.72 && velocity <= -900;
+            final deliberate =
+                offset <= -maxDrag * 0.45 ||
+                (offset <= -maxDrag * 0.25 && velocity <= -1200);
             if (deliberate) {
               setState(() => _dragOffset = 0);
               await _confirmDelete(context);
@@ -357,35 +359,35 @@ class _WorkoutRowState extends State<_WorkoutRow> {
           },
           child: Stack(
             children: [
-              Visibility(
-                visible: offset < 0,
-                child: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 24),
-                  decoration: BoxDecoration(
-                    color: context.v.danger,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.delete_outline_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '删除',
-                        style: TextStyle(
+              if (offset < 0)
+                Positioned.fill(
+                  child: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 24),
+                    decoration: BoxDecoration(
+                      color: context.v.danger,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.delete_outline_rounded,
                           color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          size: 24,
                         ),
-                      ),
-                    ],
+                        SizedBox(width: 8),
+                        Text(
+                          '删除',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
               ),
               Transform.translate(
                 offset: Offset(offset, 0),
