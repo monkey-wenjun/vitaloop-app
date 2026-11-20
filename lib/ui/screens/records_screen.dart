@@ -357,46 +357,55 @@ class _WorkoutRowState extends State<_WorkoutRow> {
           },
           child: Stack(
             children: [
-              Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 24),
-                decoration: BoxDecoration(
-                  color: context.v.danger,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      '删除',
-                      style: TextStyle(
+              Visibility(
+                visible: offset < 0,
+                child: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 24),
+                  decoration: BoxDecoration(
+                    color: context.v.danger,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.delete_outline_rounded,
                         color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        size: 20,
                       ),
-                    ),
-                  ],
+                      SizedBox(width: 8),
+                      Text(
+                        '删除',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Transform.translate(
                 offset: Offset(offset, 0),
-                child: VRowItem(
-                  icon: sportIcon(workout.sport),
-                  iconBackground: sportTint(context, workout.sport),
-                  iconColor: sportInk(context, workout.sport),
-                  title: sportName(workout.sport),
-                  subtitle:
-                      '${relativeDay(start)} ${clock(start)} · ${fmtDistance(workout.distanceM)}',
-                  badge: workout.synced ? null : '待同步',
-                  value: fmtDuration(workout.durationSec),
-                  valueSub: '${fmtInt(workout.calories)} kcal',
-                  onTap: () => _open(context),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: context.v.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: VRowItem(
+                    icon: sportIcon(workout.sport),
+                    iconBackground: sportTint(context, workout.sport),
+                    iconColor: sportInk(context, workout.sport),
+                    title: sportName(workout.sport),
+                    subtitle:
+                        '${relativeDay(start)} ${clock(start)} · ${fmtDistance(workout.distanceM)}',
+                    badge: workout.synced ? null : '待同步',
+                    value: fmtDuration(workout.durationSec),
+                    valueSub: '${fmtInt(workout.calories)} kcal',
+                    onTap: () => _open(context),
+                  ),
                 ),
               ),
             ],
