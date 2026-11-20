@@ -22,6 +22,13 @@ class CloudProfile {
   final String avatar;
 }
 
+class CloudVault {
+  const CloudVault({this.data, this.keyBackup});
+
+  final String? data;
+  final String? keyBackup;
+}
+
 class CloudException implements Exception {
   const CloudException(this.message, {this.status});
 
@@ -198,6 +205,23 @@ class CloudApi {
       body: {'nickname': nickname, 'avatar': avatar},
     );
   }
+
+  static Future<CloudVault> vault(String token) async {
+    final body = await _request('GET', '/v1/account/vault', token: token);
+    final map = jsonDecode(body) as Map<String, dynamic>;
+    return CloudVault(
+      data: map['data'] as String?,
+      keyBackup: map['key_backup'] as String?,
+    );
+  }
+
+  static Future<void> saveVault(String token, String data, String keyBackup) =>
+      _request(
+        'PUT',
+        '/v1/account/vault',
+        token: token,
+        body: {'data': data, 'key_backup': keyBackup},
+      );
 
   /// 旧版服务端在 `/api/v1/app/config`，新版自建服务走 `/v1/app/config`。
   /// 两个入口都允许匿名尝试；需要账号的部署会在 401 后由调用方带 token 重试。

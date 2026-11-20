@@ -680,6 +680,22 @@ class VitaloopApi {
 
   static Future<String> exportAccountData() => rust.exportAccountData();
 
+  static Future<String> exportAccountVault({required String password}) =>
+      rust.exportAccountVault(password: password);
+
+  static Future<int> importAccountVault({
+    required String payload,
+    required String password,
+  }) async =>
+      (await rust.importAccountVault(
+        payload: payload,
+        password: password,
+      ))
+          .toInt();
+
+  static Future<String> exportAccountKeyBackup({required String password}) =>
+      rust.exportAccountKeyBackup(password: password);
+
   static Future<int> importAccountData({required String payload}) async =>
       (await rust.importAccountData(payload: payload)).toInt();
 

@@ -1,7 +1,13 @@
 use anyhow::Result;
+use aes_gcm::aead::{Aead, KeyInit, Payload};
+use aes_gcm::{Aes256Gcm, Nonce};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use rusqlite::types::Value;
 use rusqlite::OptionalExtension;
+use serde_json::Value as JsonValue;
 use serde_json::{json, Map, Number, Value as JsonValue};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
 use crate::store;
@@ -17,7 +23,6 @@ pub(crate) const TABLES: &[&str] = &[
     "weight_records",
     "workouts",
     "workout_tombstones",
-    "profile",
     "settings",
     "devices",
     "metric_points",
@@ -45,6 +50,7 @@ pub(crate) const TABLES: &[&str] = &[
 const PRIVATE_SETTINGS: &[&str] = &[
     "signed_in",
     "account_email",
+    "cloud_server",
     "guest",
     "cloud_account_id",
     "cloud_token",
@@ -57,8 +63,240 @@ const PRIVATE_SETTINGS: &[&str] = &[
     "legacy_backfill_v2_done",
 ];
 
+const CREDENTIAL_SETTINGS: &[&str] = &[
+    "signed_in",
+    "account_email",
+    "guest",
+    "cloud_account_id",
+    "cloud_token",
+    "cloud_server",
+    "watch_auth_key",
+    "watch_name",
+    "watch_address",
+    "huawei_account",
+    "huawei_address",
+    "fake_android_id",
+];
+
+const ACCOUNT_KEY_SETTING: &str = "account_vault_key";
+const ACCOUNT_KEY_VERSION: u8 = 1;
+
 fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+fn sha256_bytes(parts: &[&[u8]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    for part in parts {
+        hasher.update(part);
+    }
+    hasher.finalize().into()
+}
+
+fn random_bytes(count: usize) -> Result<Vec<u8>> {
+    use rand::RngCore;
+    let mut out = vec![0_u8; count];
+    rand::rng().fill_bytes(&mut out);
+    Ok(out)
+}
+
+fn derive_wrap_key(password: &str, salt: &[u8]) -> [u8; 32] {
+    let mut key = sha256_bytes(&[b"vitaloop-account-wrap-v1", password.as_bytes(), salt]);
+    for rounds in 0..60_000 {
+        let round = (rounds as u64).to_be_bytes();
+        key = sha256_bytes(&[&key, salt, password.as_bytes(), &round]);
+    }
+    key
+}
+
+fn seal_aead(key: &[u8; 32], nonce: &[u8], plaintext: &[u8], associated: &[u8]) -> Result<Vec<u8>> {
+    let cipher = Aes256Gcm::new(key.into());
+    cipher
+        .encrypt(Nonce::try_from(nonce)?, Payload {
+            msg: plaintext,
+            aad: associated,
+        })
+        .map_err(|_| anyhow::anyhow!("account vault encryption failed"))
+}
+
+fn open_aead(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8], associated: &[u8]) -> Result<Vec<u8>> {
+    let cipher = Aes256Gcm::new(key.into());
+    cipher
+        .decrypt(Nonce::try_from(nonce)?, Payload {
+            msg: ciphertext,
+            aad: associated,
+        })
+        .map_err(|_| anyhow::anyhow!("account vault password is incorrect"))
+}
+
+fn json_blob(value: &JsonValue) -> Result<Vec<u8>> {
+    Ok(serde_json::to_vec(value)?)
+}
+
+fn account_key() -> Result<[u8; 32]> {
+    let existing = store::settings_get(ACCOUNT_KEY_SETTING, "")?;
+    let decoded = if existing.is_empty() {
+        let generated = random_bytes(32)?;
+        let encoded = BASE64.encode(&generated);
+        store::settings_set(ACCOUNT_KEY_SETTING, &encoded)?;
+        generated
+    } else {
+        BASE64
+            .decode(existing)
+            .map_err(|_| anyhow::anyhow!("invalid account vault key"))?
+    };
+    if decoded.len() != 32 {
+        return Err(anyhow::anyhow!("invalid account vault key"));
+    }
+    let mut key = [0_u8; 32];
+    key.copy_from_slice(&decoded);
+    Ok(key)
+}
+
+fn collect_account_vault() -> Result<JsonValue> {
+    let mut credentials = Map::new();
+    for key in CREDENTIAL_SETTINGS {
+        let value = store::settings_get(key, "")?;
+        if !value.is_empty() {
+            credentials.insert((*key).to_string(), JsonValue::String(value));
+        }
+    }
+    let profile = store::get_profile()?;
+    Ok(json!({
+        "v": ACCOUNT_KEY_VERSION,
+        "credentials": credentials,
+        "profile": profile,
+    }))
+}
+
+pub fn export_account_vault(password: String) -> Result<String> {
+    let plaintext = json_blob(&collect_account_vault()?)?;
+    let data_salt = random_bytes(16)?;
+    let data_nonce = random_bytes(12)?;
+    let data_key = sha256_bytes(&[b"vitaloop-account-data-v1", &data_salt, &account_key()?]);
+    let ciphertext = seal_aead(
+        &data_key,
+        &data_nonce,
+        &plaintext,
+        &json_blob(&json!({"v": ACCOUNT_KEY_VERSION}))?,
+    )?;
+    let key_salt = random_bytes(16)?;
+    let wrap_nonce = random_bytes(12)?;
+    let wrap_key = derive_wrap_key(&password, &key_salt);
+    let wrapped = seal_aead(
+        &wrap_key,
+        &wrap_nonce,
+        &account_key()?,
+        &json_blob(&json!({"v": ACCOUNT_KEY_VERSION}))?,
+    )?;
+    Ok(json!({
+        "v": ACCOUNT_KEY_VERSION,
+        "data": {
+            "salt": BASE64.encode(data_salt),
+            "nonce": BASE64.encode(data_nonce),
+            "blob": BASE64.encode(ciphertext),
+        },
+        "key": {
+            "salt": BASE64.encode(key_salt),
+            "nonce": BASE64.encode(wrap_nonce),
+            "blob": BASE64.encode(wrapped),
+        }
+    })
+    .to_string())
+}
+
+fn decrypt_account_key(payload: &JsonValue, password: &str) -> Result<[u8; 32]> {
+    let key = payload
+        .get("key")
+        .ok_or_else(|| anyhow::anyhow!("missing vault key"))?;
+    let decode = |name: &str, value: Option<&str>| -> Result<Vec<u8>> {
+        value
+            .and_then(|item| BASE64.decode(item).ok())
+            .ok_or_else(|| anyhow::anyhow!("invalid vault key {name}"))
+    };
+    let salt = decode("salt", key.get("salt").and_then(JsonValue::as_str))?;
+    let nonce = decode("nonce", key.get("nonce").and_then(JsonValue::as_str))?;
+    let blob = decode("blob", key.get("blob").and_then(JsonValue::as_str))?;
+    let associated = json_blob(&json!({"v": ACCOUNT_KEY_VERSION}))?;
+    let unwrapped = open_aead(
+        &derive_wrap_key(password, &salt),
+        &nonce,
+        &blob,
+        &associated,
+    )?;
+    if unwrapped.len() != 32 {
+        return Err(anyhow::anyhow!("invalid wrapped account key"));
+    }
+    let mut out = [0_u8; 32];
+    out.copy_from_slice(&unwrapped);
+    Ok(out)
+}
+
+fn decrypt_account_vault(payload: &str, password: &str) -> Result<JsonValue> {
+    let parsed: JsonValue = serde_json::from_str(payload)?;
+    let version = parsed.get("v").and_then(JsonValue::as_u64);
+    if version != Some(ACCOUNT_KEY_VERSION.into()) {
+        return Err(anyhow::anyhow!("unsupported account vault version"));
+    }
+    let account_key = decrypt_account_key(&parsed, password)?;
+    let data = parsed
+        .get("data")
+        .ok_or_else(|| anyhow::anyhow!("missing vault data"))?;
+    let decode = |name: &str| -> Result<Vec<u8>> {
+        data.get(name)
+            .and_then(JsonValue::as_str)
+            .and_then(|item| BASE64.decode(item).ok())
+            .ok_or_else(|| anyhow::anyhow!("invalid vault data {name}"))
+    };
+    let associated = json_blob(&json!({"v": version.unwrap_or(0)}))?;
+    let plaintext = open_aead(
+        &account_key,
+        &decode("nonce")?,
+        &decode("blob")?,
+        &associated,
+    )?;
+    Ok(serde_json::from_slice(&plaintext)?)
+}
+
+pub fn import_account_vault(payload: String, password: String) -> Result<usize> {
+    let vault = decrypt_account_vault(&payload, &password)?;
+    let mut imported = 0_usize;
+    if let Some(credentials) = vault.get("credentials").and_then(JsonValue::as_object) {
+        for (key, value) in credentials {
+            if CREDENTIAL_SETTINGS.contains(&key.as_str()) {
+                if let Some(value) = value.as_str() {
+                    store::settings_set(key, value)?;
+                    imported += 1;
+                }
+            }
+        }
+    }
+    if let Some(profile) = vault.get("profile") {
+        let profile = serde_json::from_value::<crate::api::types::Profile>(profile.clone())?;
+        store::save_profile(profile)?;
+        imported += 1;
+    }
+    Ok(imported)
+}
+
+pub fn export_account_key_backup(password: String) -> Result<String> {
+    let key = account_key()?;
+    let salt = random_bytes(16)?;
+    let nonce = random_bytes(12)?;
+    let wrap_key = derive_wrap_key(&password, &salt);
+    let blob = seal_aead(
+        &wrap_key,
+        &nonce,
+        &key,
+        &json_blob(&json!({"v": ACCOUNT_KEY_VERSION}))?,
+    )?;
+    Ok(json!({
+        "v": ACCOUNT_KEY_VERSION,
+        "salt": BASE64.encode(salt),
+        "nonce": BASE64.encode(nonce),
+        "blob": BASE64.encode(blob),
+    })
+    .to_string())
 }
 
 fn table_columns(conn: &rusqlite::Connection, table: &str) -> Result<Vec<String>> {

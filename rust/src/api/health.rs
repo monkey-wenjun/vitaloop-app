@@ -505,6 +505,21 @@ pub fn export_account_data() -> Result<String> {
     crate::cloud::export_account_data()
 }
 
+/// 导出密码加密的账号资料与凭据。服务端只见密文，密码不出本机。
+pub fn export_account_vault(password: String) -> Result<String> {
+    crate::cloud::export_account_vault(password)
+}
+
+/// 解密并导入云端账号资料与凭据。
+pub fn import_account_vault(payload: String, password: String) -> Result<i64> {
+    Ok(crate::cloud::import_account_vault(payload, password)? as i64)
+}
+
+/// 导出密码加密的数据密钥备份；用于服务端无法解密的账号级恢复。
+pub fn export_account_key_backup(password: String) -> Result<String> {
+    crate::cloud::export_account_key_backup(password)
+}
+
 /// 把云端健康快照合并回本机；返回写入行数。
 pub fn import_account_data(payload: String) -> Result<i64> {
     Ok(crate::cloud::import_account_data(payload)? as i64)
