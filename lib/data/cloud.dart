@@ -51,6 +51,7 @@ class CloudApi {
   // 健康快照动辄 9 MB+，手机网络上 20 秒根本传不完；超时强断会让服务端只收到
   // 半截 body（旧版服务端还会把它落盘成损坏 JSON）。
   static const _transferTimeout = Duration(minutes: 3);
+
   /// 本机落库的手表海拔已是米；上传时告诉服务端不要再按分米换算。
   static const altitudeUnitHeader = 'X-Awen-Altitude-Unit';
   static const altitudeUnitVersion = '14';
@@ -284,12 +285,14 @@ class CloudApi {
     Duration timeout = _timeout,
   }) async {
     final client = await _newClient();
+    final stopwatch = Stopwatch()..start();
     try {
       final normalizedBase = normalizeBase(base);
       if (normalizedBase.isEmpty) {
         throw const CloudException('请先填写云端服务器地址');
       }
       final uri = Uri.parse('$normalizedBase$path');
+      debugCloudTrace('open $method $uri');
       final req = await client.openUrl(method, uri).timeout(_timeout);
       req.headers.contentType = ContentType.json;
       if (token != null && token.isNotEmpty) {
@@ -306,6 +309,9 @@ class CloudApi {
         req.add(rawBytes);
       }
       final res = await req.close().timeout(timeout);
+      debugCloudTrace(
+        'status $method $path ${res.statusCode} in ${stopwatch.elapsedMilliseconds}ms',
+      );
       final text = await utf8.decoder.bind(res).join().timeout(timeout);
       if (res.statusCode < 200 || res.statusCode >= 300) {
         final detail = text.trim().isEmpty
@@ -315,6 +321,12 @@ class CloudApi {
       }
       return text;
     } on CloudException {
+      rethrow;
+    } catch (error, stackTrace) {
+      debugCloudTrace(
+        'error $method $path in ${stopwatch.elapsedMilliseconds}ms '
+        '$error\n$stackTrace',
+      );
       rethrow;
     } on TimeoutException {
       throw const CloudException('连接云端超时');
@@ -341,5 +353,12 @@ class CloudApi {
       _ => raw,
     };
   }
-}
 
+  static void debugCloudTrace(String message) {
+    assert(() {
+      // ignore: avoid_print
+      print('[cloud-http] $message');
+      return true;
+    }());
+  }
+}
