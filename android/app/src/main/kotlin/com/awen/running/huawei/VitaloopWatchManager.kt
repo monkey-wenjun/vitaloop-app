@@ -1105,7 +1105,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                 request.setupTimeoutUntilNext(timeoutMs.toInt())
                 request.doPerform()
             } catch (e: Exception) {
-                out.set("error:" + (e.message ?: e.javaClass.simpleName))
+                out.set("error:" + e.stackTraceToString().take(600))
                 latch.countDown()
             }
         }, "VitaloopRawProbe").apply { isDaemon = true }.start()

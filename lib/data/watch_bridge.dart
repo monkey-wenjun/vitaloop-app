@@ -225,6 +225,7 @@ class WatchBridge {
         ? estimatedMaxHr(birthDate)
         : state.maxHr;
     final restingHr = (state.home?.restingHr ?? 59).round();
+    debugPrint('[watch] pushUserProfile age=$age resting=$restingHr max=$maxHr');
     try {
       await _method.invokeMethod<bool>('watch_user_profile', {
         'age': age > 0 ? age : 36,
