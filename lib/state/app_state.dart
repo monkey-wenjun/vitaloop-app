@@ -8,6 +8,7 @@ import '../data/app_update.dart';
 import '../data/cloud.dart';
 import '../data/cloud_sync_policy.dart';
 import '../data/locale_bridge.dart';
+import '../data/watch_bridge.dart';
 import '../data/workout_weather.dart';
 import '../l10n/language_options.dart';
 import '../src/rust/api/types.dart';
@@ -688,6 +689,8 @@ class AppState extends ChangeNotifier {
     await VitaloopApi.saveProfile(next);
     profile = next;
     notifyListeners();
+    // 档案年龄变了，手表的训练区间要跟着重算
+    unawaited(WatchBridge.instance.pushUserProfile());
     if (signedIn && _cloudToken?.isNotEmpty == true) {
       try {
         if (_sessionPassword case final String password) {

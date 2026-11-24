@@ -5,6 +5,7 @@ import 'package:vitaloop/l10n/localized_text.dart';
 
 import '../../data/api.dart';
 import '../../data/app_update.dart';
+import '../../data/watch_bridge.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/language_options.dart';
 import '../../state/app_state.dart';
@@ -760,6 +761,7 @@ class _HeartRateSettingsScreenState extends State<HeartRateSettingsScreen> {
     await VitaloopApi.setSetting('max_hr_auto', value ? '0' : '1');
     await VitaloopApi.setSetting('max_hr', '$_maxHr');
     await widget.state.refresh();
+    await WatchBridge.instance.pushUserProfile();
   }
 
   @override

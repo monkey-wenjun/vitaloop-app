@@ -140,6 +140,8 @@ public class DebugRequest extends Request {
 
         current = nextComma + 1;
 
+        // 没有 TLV 时也要给一个空的 TLV：serialize() 会解引用 tlv，null 直接 NPE。
+        packet.setTlv(new HuaweiTLV());
         if (current < debugString.length()) {
             HuaweiTlvParseReturn retv = parseTlv(debugString.substring(current));
             if (current + retv.parsedCount != debugString.length())

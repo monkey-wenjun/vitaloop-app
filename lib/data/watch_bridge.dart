@@ -8,6 +8,7 @@ import 'api.dart';
 import 'blog_hr.dart';
 import '../src/rust/api/types.dart';
 import '../state/app_state.dart';
+import '../util/format.dart';
 
 /// 手表闹钟。index=0 为智能唤醒，1..5 为普通闹钟。
 class WatchAlarm {
@@ -210,6 +211,29 @@ class WatchBridge {
   void attach(AppState appState) {
     _appState = appState;
     _ensureListen();
+    // 手表的心率区间按真实年龄/静息/最大心率下发，别让它用写死的默认值。
+    unawaited(pushUserProfile());
+  }
+
+  /// 把档案年龄、静息心率、最大心率同步给原生层（P2P 心率区间会立即重发）。
+  Future<void> pushUserProfile() async {
+    final state = _appState;
+    if (state == null) return;
+    final birthDate = state.profile?.birthDate ?? '';
+    final age = ageFromBirthDate(birthDate);
+    final maxHr = state.maxHrAuto || state.maxHr <= 0
+        ? estimatedMaxHr(birthDate)
+        : state.maxHr;
+    final restingHr = (state.home?.restingHr ?? 59).round();
+    try {
+      await _method.invokeMethod<bool>('watch_user_profile', {
+        'age': age > 0 ? age : 36,
+        'restingHr': restingHr,
+        'maxHr': maxHr,
+      });
+    } catch (_) {
+      // 老版本原生层没有这个方法，忽略即可。
+    }
   }
 
   Future<void> _ensureListen() async {

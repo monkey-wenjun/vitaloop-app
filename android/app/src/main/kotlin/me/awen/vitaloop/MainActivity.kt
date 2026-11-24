@@ -498,6 +498,14 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
+                "watch_user_profile" -> {
+                    manager.setUserProfile(
+                        call.argument<Int>("age") ?: 36,
+                        call.argument<Int>("restingHr") ?: 59,
+                        call.argument<Int>("maxHr") ?: 190,
+                    )
+                    result.success(true)
+                }
                 "watch_tools_status" -> result.success(manager.watchToolsStatusJson())
                 "wear_query" -> {
                     manager.refreshWearStatus("手动")

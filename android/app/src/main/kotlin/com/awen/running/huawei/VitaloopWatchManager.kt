@@ -147,6 +147,7 @@ import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.SetN
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.SetSkinTemperatureMeasurement
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.SetTimeRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.SetTimeZoneIdRequest
+import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.RawCommandRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.SetTruSleepRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.SetWearMessagePushRequest
 import nodomain.freeyourgadget.gadgetbridge.service.devices.huawei.requests.SetWorkModeRequest
@@ -791,6 +792,11 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         setState("disconnected")
     }
 
+    /** 用户资料（年龄/静息/最大心率）：P2P 心率区间按它下发，不再写死 36/54/195。 */
+    @Volatile private var profileAge = 36
+    @Volatile private var profileRestingHr = 59
+    @Volatile private var profileMaxHr = 190
+
     /** 断链后 P2P 注册与 0x28 文件槽都失效，重连时必须重新握手。 */
     private fun resetP2PState() {
         try {
@@ -1074,6 +1080,41 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     }
 
     // ==================== 手表工具（联系人 / 表盘 / 音乐 / 应用 / 遥控） ====================
+
+    /**
+     * 逆向探针：按 Gadgetbridge 的 debug-string 语法发一条原始命令，同步等应答。
+     *
+     * 语法：`svc,cmd,encrypt,slice[,(tag,(type value))...]`，例如
+     * `0x01,0x2B,t,t` / `0x01,0x2B,t,t,(1,B1),(2,B35)`。
+     * 返回应答 TLV 的十六进制；没应答返回 `timeout`，未连接返回 `not-connected`。
+     *
+     * 只用于协议对照实验（看手表认不认某个命令号/载荷），不写库、不改设置。
+     */
+    fun probeRawCommand(debugString: String, timeoutMs: Long = 6000): String {
+        if (state != "ready" || transport == null) return "not-connected"
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val out = java.util.concurrent.atomic.AtomicReference("timeout")
+        Thread({
+            try {
+                val request = object : RawCommandRequest(this, debugString) {
+                    override fun processResponse() {
+                        out.set(describeReceivedTlv().ifEmpty { "empty" })
+                        latch.countDown()
+                    }
+                }
+                request.setupTimeoutUntilNext(timeoutMs.toInt())
+                request.doPerform()
+            } catch (e: Exception) {
+                out.set("error:" + (e.message ?: e.javaClass.simpleName))
+                latch.countDown()
+            }
+        }, "VitaloopRawProbe").apply { isDaemon = true }.start()
+        latch.await(timeoutMs + 800, java.util.concurrent.TimeUnit.MILLISECONDS)
+        val result = out.get()
+        addLog("探针 $debugString → $result")
+        FileLogger.i("RawProbe", "$debugString -> $result")
+        return result
+    }
 
     fun watchToolsStatusJson(): String {
         val appArray = JSONArray()
@@ -1491,6 +1532,26 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
     }
 
     /** 手动“同步所有设置”：重发勿扰、闹钟、日历、天气、联系人，再拉表盘和应用列表。 */
+    /**
+     * 更新下发给手表的心率区间所用资料，并在已注册时立即重发（不必等重连）。
+     * 年龄来自档案生日；最大心率取设置里的手动值或 220−年龄；静息心率取当天读数。
+     */
+    fun setUserProfile(age: Int, restingHr: Int, maxHr: Int) {
+        val safeAge = age.coerceIn(10, 100)
+        val safeRest = restingHr.coerceIn(30, 120)
+        val safeMax = maxHr.coerceIn(120, 220)
+        val changed = safeAge != profileAge || safeRest != profileRestingHr || safeMax != profileMaxHr
+        profileAge = safeAge
+        profileRestingHr = safeRest
+        profileMaxHr = safeMax
+        FileLogger.i(TAG, "用户资料 年龄=$safeAge 静息=$safeRest 最大=$safeMax changed=$changed")
+        if (!changed) return
+        val service = p2pManager.getRegisteredService(HuaweiP2PTrackService.MODULE)
+            as? HuaweiP2PTrackService ?: return
+        runCatching { service.refreshHeartZoneConfig(safeAge, safeRest, safeMax) }
+            .onFailure { FileLogger.e(TAG, "重发心率区间失败", it) }
+    }
+
     fun syncAllSettings(onDone: (String) -> Unit) {
         if (state != "ready" || transport == null) {
             onDone("手表未连接，设置会在连接后自动同步")
@@ -2981,7 +3042,7 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
                 // GT5 把这当成“官方健康 App 在线”的标志；少了它，字典请求会被直接回 0xCF。
                 if (p2pManager.getRegisteredService(HuaweiP2PTrackService.MODULE) == null) {
                     runCatching {
-                        HuaweiP2PTrackService(p2pManager, 36, 54, 195).register()
+                        HuaweiP2PTrackService(p2pManager, profileAge, profileRestingHr, profileMaxHr).register()
                         addLog("P2P 心率区间服务已注册")
                     }.onFailure {
                         FileLogger.e(TAG, "P2P 心率区间服务注册失败", it)
