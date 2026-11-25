@@ -1006,6 +1006,19 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         private set
 
     private fun setState(s: String) {
+        if (s == "ready" && VitaloopUserProfile.ready) {
+            // 初始化链里也有一条 UserInfo，但链可能被前面的超时中断；连接就绪后再补一次。
+            Thread({
+                try {
+                    Thread.sleep(1200)
+                    val request = SendFitnessUserInfoRequest(this)
+                    request.setupTimeoutUntilNext(5000)
+                    request.doPerform()
+                } catch (e: Exception) {
+                    FileLogger.e(TAG, "补发用户资料失败", e)
+                }
+            }, "VitaloopUserInfoAfterReady").apply { isDaemon = true; start() }
+        }
         if (s != state) addLog("连接状态：$s")
         state = s
         onState?.invoke(s)
@@ -1536,7 +1549,15 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
      * 更新下发给手表的心率区间所用资料，并在已注册时立即重发（不必等重连）。
      * 年龄来自档案生日；最大心率取设置里的手动值或 220−年龄；静息心率取当天读数。
      */
-    fun setUserProfile(age: Int, restingHr: Int, maxHr: Int) {
+    fun setUserProfile(
+        age: Int,
+        restingHr: Int,
+        maxHr: Int,
+        heightCm: Int = 0,
+        weightKg: Int = 0,
+        gender: Int = 3,
+        birthday: Int = 0,
+    ) {
         val safeAge = age.coerceIn(10, 100)
         val safeRest = restingHr.coerceIn(30, 120)
         val safeMax = maxHr.coerceIn(120, 220)
@@ -1545,6 +1566,18 @@ class VitaloopWatchManager private constructor(private val appContext: Context) 
         profileRestingHr = safeRest
         profileMaxHr = safeMax
         FileLogger.i(TAG, "用户资料 年龄=$safeAge 静息=$safeRest 最大=$safeMax changed=$changed")
+        // 手表「年龄」来自 FitnessData UserInfo，独立于心率区间，连接时/资料变化时都要重发。
+        VitaloopUserProfile.update(safeAge, heightCm, weightKg, gender, birthday)
+        if (state == "ready" && transport != null) {
+            Thread({
+                runCatching {
+                    val request = SendFitnessUserInfoRequest(this)
+                    request.setupTimeoutUntilNext(5000)
+                    request.doPerform()
+                }.onFailure { FileLogger.e(TAG, "重发用户资料失败", it) }
+            }, "VitaloopUserInfoPush").apply { isDaemon = true; start()
+            }
+        }
         if (!changed) return
         val service = p2pManager.getRegisteredService(HuaweiP2PTrackService.MODULE)
             as? HuaweiP2PTrackService ?: return

@@ -503,6 +503,10 @@ class MainActivity : FlutterActivity() {
                         call.argument<Int>("age") ?: 36,
                         call.argument<Int>("restingHr") ?: 59,
                         call.argument<Int>("maxHr") ?: 190,
+                        call.argument<Int>("heightCm") ?: 0,
+                        call.argument<Int>("weightKg") ?: 0,
+                        call.argument<Int>("gender") ?: 3,
+                        call.argument<Int>("birthday") ?: 0,
                     )
                     result.success(true)
                 }

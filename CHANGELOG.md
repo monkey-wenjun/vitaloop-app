@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- 手表不再固定显示「年龄 30、最大心率 195」：断开 Gadgetbridge 里写死的
+  `ActivityUser`（30 岁 / 175cm / 70kg / 性别未知），连接时改用本人档案
+  （生日、身高、体重、性别）通过 `FitnessData UserInfo (0x07/0x02)` 上报；
+  连接就绪后再补发一次，档案或最大心率设置变化时立即重发。
+- 心率区间按真实年龄、静息心率与最大心率下发，不再使用固定值。
+- 修正 `DebugRequest` 在无 TLV 时的空指针。
+
+### Added
+
+- adb 协议探针：仅 `android.permission.DUMP` 可触发，用于对照实验华为手表的
+  原始命令与应答（抓包/逆向调试用，不参与正常业务）。
+
 ## 0.1.1 — 2026-11-16
 
 ### Added

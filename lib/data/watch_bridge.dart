@@ -225,16 +225,37 @@ class WatchBridge {
         ? estimatedMaxHr(birthDate)
         : state.maxHr;
     final restingHr = (state.home?.restingHr ?? 59).round();
-    debugPrint('[watch] pushUserProfile age=$age resting=$restingHr max=$maxHr');
+    final profile = state.profile;
+    final heightCm = (profile?.heightCm ?? 175).round();
+    final weightKg = (profile?.weightKg ?? 65).round();
+    final gender = profile?.gender == 'female' ? 2 : (profile?.gender == 'male' ? 1 : 3);
+    final birthday = _encodeBirthday(profile?.birthDate);
+    debugPrint('[watch] pushUserProfile age=$age resting=$restingHr max=$maxHr '
+        'height=$heightCm weight=$weightKg gender=$gender birthday=$birthday');
     try {
       await _method.invokeMethod<bool>('watch_user_profile', {
         'age': age > 0 ? age : 36,
         'restingHr': restingHr,
         'maxHr': maxHr,
+        'heightCm': heightCm,
+        'weightKg': weightKg,
+        'gender': gender,
+        'birthday': birthday,
       });
     } catch (_) {
       // 老版本原生层没有这个方法，忽略即可。
     }
+  }
+
+  /// 生日编码成手表要的 `year << 16 | month << 8 | day`，解析失败返回 0。
+  int _encodeBirthday(String? value) {
+    final parts = (value ?? '').split('-');
+    if (parts.length != 3) return 0;
+    final year = int.tryParse(parts[0]) ?? 0;
+    final month = int.tryParse(parts[1]) ?? 0;
+    final day = int.tryParse(parts[2]) ?? 0;
+    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return 0;
+    return (year << 16) | (month << 8) | day;
   }
 
   Future<void> _ensureListen() async {
